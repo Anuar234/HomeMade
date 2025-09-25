@@ -126,75 +126,94 @@ async def get_app():
         <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
         <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
         <style>
-            body {
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-                padding: 16px;
-                background: #f8f9fa;
-            }
-            .header {
-                text-align: center;
-                margin-bottom: 20px;
-            }
-            .search-input {
-                width: 100%;
-                padding: 12px;
-                border-radius: 8px;
-                border: 1px solid #ddd;
-                font-size: 16px;
-                margin-bottom: 20px;
-            }
-            .icons-grid {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 20px;
-    justify-items: center;
-}
+    body {
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+        padding: 12px;
+        background: #f8f9fa;
+        margin: 0;
+    }
 
+    .header {
+        text-align: center;
+        margin-bottom: 16px;
+    }
 
-.icons-grid {
-    display: grid;
-    grid-template-columns: repeat(2, 1fr); /* 2 колонки */
-    gap: 24px;
-    justify-items: center;
-    padding: 20px 0;
-}
+    .search-input {
+        width: 100%;
+        padding: 10px 14px;
+        border-radius: 10px;
+        border: 1px solid #ddd;
+        font-size: 16px;
+        margin-bottom: 20px;
+    }
 
-.icon-card {
-    background: white;
-    border-radius: 16px;
-    padding: 20px;
-    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    width: 160px;  /* чуть шире, чтобы смотрелось симметрично */
-    transition: transform 0.2s;
-}
+    .icons-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr); /* 2 колонки для мобилы */
+        gap: 16px;
+        justify-items: center;
+    }
 
-.icon-card:hover {
-    transform: scale(1.05);
-}
+    .icon-card {
+        background: white;
+        border-radius: 14px;
+        padding: 14px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        width: 100%;
+        max-width: 150px; /* ограничение чтобы карточки не были слишком большими */
+        transition: transform 0.2s;
+    }
 
-.category-btn {
-    margin-top: 16px;
-    padding: 10px 18px;
-    background: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    cursor: pointer;
-    font-size: 15px;
-    font-weight: 600;
-    transition: background 0.2s, transform 0.1s;
-}
+    .icon-card:hover {
+        transform: scale(1.03);
+    }
 
-.category-btn:hover {
-    background: #45a049;
-    transform: translateY(-2px);
-}
+    .icon-card lottie-player {
+        width: 100px;
+        height: 100px;
+    }
 
+    .category-btn {
+        margin-top: 10px;
+        padding: 10px 14px;
+        background: #4CAF50;
+        color: white;
+        border: none;
+        border-radius: 10px;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 600;
+        width: 100%;
+        transition: background 0.2s, transform 0.1s;
+    }
 
-        </style>
+    .category-btn:hover {
+        background: #45a049;
+        transform: translateY(-2px);
+    }
+
+    /* 🔥 Адаптив для совсем маленьких экранов */
+    @media (max-width: 400px) {
+        .icon-card {
+            max-width: 130px;
+            padding: 12px;
+        }
+
+        .icon-card lottie-player {
+            width: 80px;
+            height: 80px;
+        }
+
+        .category-btn {
+            font-size: 14px;
+            padding: 8px 12px;
+        }
+    }
+</style>
+
     </head>
     <body>
         <div id="app">
