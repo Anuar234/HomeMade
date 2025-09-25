@@ -144,22 +144,45 @@ async def get_app():
                 margin-bottom: 20px;
             }
             .icons-grid {
-                display: grid;
-                grid-template-columns: repeat(3, 1fr);
-                gap: 20px;
-                justify-items: center;
-            }
-            .icon-card {
-                background: white;
-                border-radius: 12px;
-                padding: 10px;
-                box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-                cursor: pointer;
-                transition: transform 0.2s;
-            }
-            .icon-card:hover {
-                transform: scale(1.05);
-            }
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 20px;
+    justify-items: center;
+}
+
+.icon-card {
+    background: white;
+    border-radius: 16px;
+    padding: 16px;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.1);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 140px; /* фиксированная ширина для равномерности */
+    transition: transform 0.2s;
+}
+
+.icon-card:hover {
+    transform: scale(1.05);
+}
+
+.category-btn {
+    margin-top: 12px;
+    padding: 8px 14px;
+    background: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    transition: background 0.2s, transform 0.1s;
+}
+
+.category-btn:hover {
+    background: #45a049;
+    transform: translateY(-2px);
+}
+
         </style>
     </head>
     <body>
@@ -175,16 +198,25 @@ async def get_app():
             </div>
 
             <div class="icons-grid">
-                <div v-for="cat in categories" :key="cat.name" class="icon-card" @click="goToCategory(cat)">
-                    <lottie-player
-                        :src="cat.icon"
-                        background="transparent"
-                        speed="1"
-                        style="width: 100px; height: 100px;"
-                        loop autoplay>
-                    </lottie-player>
-                </div>
-            </div>
+    <div 
+        v-for="cat in categories" 
+        :key="cat.name" 
+        class="icon-card"
+    >
+        <lottie-player
+            :src="cat.icon"
+            background="transparent"
+            speed="1"
+            style="width: 100px; height: 100px; margin: 0 auto;"
+            loop autoplay>
+        </lottie-player>
+
+        <button class="category-btn" @click="goToCategory(cat)">
+            Перейти
+        </button>
+    </div>
+</div>
+
         </div>
 
         <script>
@@ -199,7 +231,6 @@ async def get_app():
                     { name: "soup", icon: "/static/stickers_animations/cookie.json" },
                     { name: "samsa", icon: "/static/stickers_animations/pie.json" },
                     { name: "shashlik", icon: "/static/stickers_animations/donut.json" },
-                    { name: "dessert", icon: "/static/stickers_animations/pancake.json" },
                 ]);
 
                 const goToCategory = (cat) => {
@@ -263,6 +294,7 @@ async def get_app_category(category: str):
 async def get_products():
     """Получить все продукты"""
     return products_db
+
 
 @app.get("/api/products/{product_id}", response_model=Product)
 async def get_product(product_id: str):
