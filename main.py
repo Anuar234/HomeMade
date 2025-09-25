@@ -116,7 +116,6 @@ async def root():
 
 @app.get("/app", response_class=HTMLResponse)
 async def get_app():
-    """Возвращает фронтенд приложение"""
     return HTMLResponse("""
     <!DOCTYPE html>
     <html lang="ru">
@@ -127,337 +126,138 @@ async def get_app():
         <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
         <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
         <style>
-            * { margin: 0; padding: 0; box-sizing: border-box; }
-            body { 
+            body {
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
-                padding: 16px; 
+                padding: 16px;
                 background: #f8f9fa;
             }
             .header {
                 text-align: center;
-                margin-bottom: 30px;
-                padding: 20px;
-                background: white;
-                border-radius: 12px;
-                box-shadow: 0 2px 8px rgba(0,0,0,0.1);
-            }
-            .search-bar {
                 margin-bottom: 20px;
             }
             .search-input {
                 width: 100%;
                 padding: 12px;
-                border: 1px solid #ddd;
                 border-radius: 8px;
+                border: 1px solid #ddd;
                 font-size: 16px;
+                margin-bottom: 20px;
             }
-            .products-grid {
+            .icons-grid {
                 display: grid;
-                gap: 16px;
+                grid-template-columns: repeat(3, 1fr);
+                gap: 20px;
+                justify-items: center;
             }
-            .product-card { 
-                background: white; 
-                border-radius: 12px; 
-                padding: 16px; 
-                box-shadow: 0 2px 12px rgba(0,0,0,0.1);
-                transition: transform 0.2s;
-            }
-            .product-card:hover {
-                transform: translateY(-2px);
-            }
-            .product-image { 
-                width: 100%; 
-                height: 200px; 
-                border-radius: 8px; 
-                object-fit: cover; 
-                margin-bottom: 12px; 
-            }
-            .product-name {
-                font-size: 18px;
-                font-weight: 600;
-                margin-bottom: 8px;
-            }
-            .product-description {
-                color: #666;
-                margin-bottom: 12px;
-                line-height: 1.4;
-            }
-            .product-cook {
-                color: #888;
-                font-size: 14px;
-                margin-bottom: 12px;
-            }
-            .product-footer {
-                display: flex;
-                justify-content: space-between;
-                align-items: center;
-            }
-            .price { 
-                font-size: 20px; 
-                font-weight: 700; 
-                color: #0088ff; 
-            }
-            .buy-button { 
-                background: #0088ff; 
-                color: white; 
-                border: none; 
-                padding: 10px 20px; 
-                border-radius: 8px; 
-                cursor: pointer; 
-                font-weight: 600;
-                transition: all 0.2s;
-            }
-            .buy-button:hover {
-                background: #0066cc;
-                transform: scale(1.05);
-            }
-            .loading {
-                text-align: center;
-                padding: 40px;
-                color: #666;
-            }
-            .modal {
-                position: fixed;
-                top: 0;
-                left: 0;
-                right: 0;
-                bottom: 0;
-                background: rgba(0,0,0,0.5);
-                display: flex;
-                align-items: center;
-                justify-content: center;
-                z-index: 1000;
-                padding: 20px;
-            }
-            .modal-content {
+            .icon-card {
                 background: white;
                 border-radius: 12px;
-                padding: 24px;
-                max-width: 400px;
-                width: 100%;
-            }
-            .form-group {
-                margin-bottom: 16px;
-            }
-            .form-label {
-                display: block;
-                margin-bottom: 6px;
-                font-weight: 600;
-            }
-            .form-input {
-                width: 100%;
-                padding: 12px;
-                border: 1px solid #ddd;
-                border-radius: 8px;
-                font-size: 16px;
-            }
-            .modal-buttons {
-                display: flex;
-                gap: 12px;
-                margin-top: 20px;
-            }
-            .btn {
-                flex: 1;
-                padding: 12px;
-                border-radius: 8px;
+                padding: 10px;
+                box-shadow: 0 2px 12px rgba(0,0,0,0.1);
                 cursor: pointer;
-                font-size: 16px;
-                font-weight: 600;
+                transition: transform 0.2s;
             }
-            .btn-cancel {
-                background: #f5f5f5;
-                border: 1px solid #ddd;
-            }
-            .btn-confirm {
-                background: #0088ff;
-                color: white;
-                border: none;
+            .icon-card:hover {
+                transform: scale(1.05);
             }
         </style>
     </head>
     <body>
         <div id="app">
             <div class="header">
-                <h1>🍽️ Home Food Abu Dhabi</h1>
-                <p>Домашняя еда от местных поваров</p>
-            </div>
-            
-            <div class="search-bar">
+                <h2>🍽️ Home Food Abu Dhabi</h2>
                 <input 
                     v-model="searchQuery"
-                    type="text" 
-                    class="search-input" 
-                    placeholder="🔍 Поиск блюд..."
+                    type="text"
+                    class="search-input"
+                    placeholder="🔍 Найти блюдо..."
                 >
             </div>
-            
-            <div v-if="loading" class="loading">
-                Загрузка продуктов...
-            </div>
-            
-            <div v-else class="products-grid">
-                <div 
-                    v-for="product in filteredProducts" 
-                    :key="product.id"
-                    class="product-card"
-                >
+
+            <div class="icons-grid">
+                <div v-for="cat in categories" :key="cat.name" class="icon-card" @click="goToCategory(cat)">
                     <lottie-player
-                src="static/stickers_animations/burger.json"
-                background="transparent"
-                speed="1"
-                style="width: 120px; height: 120px; margin: 10px auto;"
-                loop
-                autoplay>
-            </lottie-player>
-                    <div class="product-name">{{ product.name }}</div>
-                    <div class="product-description">{{ product.description }}</div>
-                    <div class="product-cook">👨‍🍳 {{ product.cook_name }}</div>
-                    <div class="product-footer">
-                        <span class="price">{{ product.price }} AED</span>
-                        <button class="buy-button" @click="openOrderModal(product)">
-                            Заказать
-                        </button>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Модальное окно -->
-            <div v-if="showModal" class="modal" @click.self="closeModal">
-                <div class="modal-content">
-                    <h3 style="margin-bottom: 20px;">Оформить заказ</h3>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Блюдо:</label>
-                        <div>{{ selectedProduct?.name }} - {{ selectedProduct?.price }} AED</div>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Ваше имя:</label>
-                        <input v-model="orderForm.name" type="text" class="form-input" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Телефон:</label>
-                        <input v-model="orderForm.phone" type="tel" class="form-input" required>
-                    </div>
-                    
-                    <div class="form-group">
-                        <label class="form-label">Адрес:</label>
-                        <input v-model="orderForm.address" type="text" class="form-input" required>
-                    </div>
-                    
-                    <div class="modal-buttons">
-                        <button class="btn btn-cancel" @click="closeModal">Отмена</button>
-                        <button class="btn btn-confirm" @click="submitOrder">Заказать</button>
-                    </div>
+                        :src="cat.icon"
+                        background="transparent"
+                        speed="1"
+                        style="width: 100px; height: 100px;"
+                        loop autoplay>
+                    </lottie-player>
                 </div>
             </div>
         </div>
 
         <script>
-            const { createApp, ref, computed, onMounted } = Vue;
-            
-            createApp({
-                setup() {
-                    const products = ref([]);
-                    const loading = ref(true);
-                    const searchQuery = ref('');
-                    const showModal = ref(false);
-                    const selectedProduct = ref(null);
-                    const orderForm = ref({
-                        name: '',
-                        phone: '',
-                        address: ''
-                    });
-                    
-                    const filteredProducts = computed(() => {
-                        if (!searchQuery.value) return products.value;
-                        return products.value.filter(product => 
-                            product.name.toLowerCase().includes(searchQuery.value.toLowerCase()) ||
-                            product.description.toLowerCase().includes(searchQuery.value.toLowerCase())
-                        );
-                    });
-                    
-                    const loadProducts = async () => {
-                        try {
-                            const response = await fetch('/api/products');
-                            if (response.ok) {
-                                products.value = await response.json();
-                            }
-                        } catch (error) {
-                            console.error('Error loading products:', error);
-                        } finally {
-                            loading.value = false;
-                        }
-                    };
-                    
-                    const openOrderModal = (product) => {
-                        selectedProduct.value = product;
-                        showModal.value = true;
-                    };
-                    
-                    const closeModal = () => {
-                        showModal.value = false;
-                        selectedProduct.value = null;
-                        orderForm.value = { name: '', phone: '', address: '' };
-                    };
-                    
-                    const submitOrder = async () => {
-                        if (!orderForm.value.name || !orderForm.value.phone || !orderForm.value.address) {
-                            alert('Пожалуйста, заполните все поля');
-                            return;
-                        }
-                        
-                        try {
-                            const orderData = {
-                                customer_name: orderForm.value.name,
-                                customer_phone: orderForm.value.phone,
-                                customer_address: orderForm.value.address,
-                                items: [{
-                                    product_id: selectedProduct.value.id,
-                                    quantity: 1
-                                }],
-                                total_amount: selectedProduct.value.price
-                            };
-                            
-                            const response = await fetch('/api/orders', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify(orderData)
-                            });
-                            
-                            if (response.ok) {
-                                alert('Заказ успешно оформлен! Мы с вами свяжемся.');
-                                closeModal();
-                            }
-                        } catch (error) {
-                            console.error('Error submitting order:', error);
-                            alert('Ошибка при оформлении заказа');
-                        }
-                    };
-                    
-                    onMounted(() => {
-                        loadProducts();
-                    });
-                    
-                    return {
-                        products,
-                        loading,
-                        searchQuery,
-                        filteredProducts,
-                        showModal,
-                        selectedProduct,
-                        orderForm,
-                        openOrderModal,
-                        closeModal,
-                        submitOrder
-                    };
-                }
-            }).mount('#app');
+        const { createApp, ref } = Vue;
+        createApp({
+            setup() {
+                const searchQuery = ref('');
+                const categories = ref([
+                    { name: "burger", icon: "/static/stickers_animations/burger.json" },
+                    { name: "pizza", icon: "/static/stickers_animations/pizza.json" },
+                    { name: "plov", icon: "/static/stickers_animations/cake.json" },
+                    { name: "soup", icon: "/static/stickers_animations/cookie.json" },
+                    { name: "samsa", icon: "/static/stickers_animations/pie.json" },
+                    { name: "shashlik", icon: "/static/stickers_animations/donut.json" },
+                    { name: "dessert", icon: "/static/stickers_animations/pancake.json" },
+                ]);
+
+                const goToCategory = (cat) => {
+                    window.location.href = `/app/${cat.name}?q=${encodeURIComponent(searchQuery.value)}`;
+                };
+
+                return { searchQuery, categories, goToCategory };
+            }
+        }).mount('#app');
         </script>
     </body>
     </html>
     """)
+
+@app.get("/app/{category}")
+async def get_app_category(category: str):
+    return HTMLResponse(f"""
+    <!DOCTYPE html>
+    <html lang="ru">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{{{{ category }}}} - Home Food Abu Dhabi</title>
+        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+        <style>
+            body {{ font-family: sans-serif; padding: 16px; background: #f8f9fa; }}
+            .product-card {{ background:white; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.1); }}
+        </style>
+    </head>
+    <body>
+        <div id="app">
+            <h2>Категория: {category}</h2>
+            <div v-for="p in products" :key="p.id" class="product-card">
+                <h3>{{{{ p.name }}}}</h3>
+                <p>{{{{ p.description }}}}</p>
+                <strong>{{{{ p.price }}}} AED</strong>
+            </div>
+        </div>
+
+        <script>
+        const {{ createApp, ref, onMounted }} = Vue;
+        createApp({{
+            setup() {{
+                const products = ref([]);
+                const load = async () => {{
+                    const res = await fetch('/api/products/{category}');
+                    products.value = await res.json();
+                }};
+                onMounted(load);
+                return {{ products }};
+            }}
+        }}).mount('#app');
+        </script>
+    </body>
+    </html>
+    """)
+
+
 
 @app.get("/api/products", response_model=List[Product])
 async def get_products():
