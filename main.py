@@ -11,6 +11,8 @@ from datetime import datetime
 
 app = FastAPI(title="Home Food Abu Dhabi")
 
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
 # CORS для работы с Telegram Mini App
 app.add_middleware(
     CORSMiddleware,
