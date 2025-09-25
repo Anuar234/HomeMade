@@ -150,15 +150,24 @@ async def get_app():
     justify-items: center;
 }
 
+
+.icons-grid {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr); /* 2 колонки */
+    gap: 24px;
+    justify-items: center;
+    padding: 20px 0;
+}
+
 .icon-card {
     background: white;
     border-radius: 16px;
-    padding: 16px;
+    padding: 20px;
     box-shadow: 0 2px 12px rgba(0,0,0,0.1);
     display: flex;
     flex-direction: column;
     align-items: center;
-    width: 140px; /* фиксированная ширина для равномерности */
+    width: 160px;  /* чуть шире, чтобы смотрелось симметрично */
     transition: transform 0.2s;
 }
 
@@ -167,14 +176,15 @@ async def get_app():
 }
 
 .category-btn {
-    margin-top: 12px;
-    padding: 8px 14px;
+    margin-top: 16px;
+    padding: 10px 18px;
     background: #4CAF50;
     color: white;
     border: none;
     border-radius: 8px;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 15px;
+    font-weight: 600;
     transition: background 0.2s, transform 0.1s;
 }
 
@@ -182,6 +192,7 @@ async def get_app():
     background: #45a049;
     transform: translateY(-2px);
 }
+
 
         </style>
     </head>
@@ -207,7 +218,7 @@ async def get_app():
             :src="cat.icon"
             background="transparent"
             speed="1"
-            style="width: 100px; height: 100px; margin: 0 auto;"
+            style="width: 120px; height: 120px; margin: 0 auto;"
             loop autoplay>
         </lottie-player>
 
