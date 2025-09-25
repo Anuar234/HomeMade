@@ -125,6 +125,7 @@ async def get_app():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Home Food Abu Dhabi</title>
         <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+        <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
         <style>
             * { margin: 0; padding: 0; box-sizing: border-box; }
             body { 
@@ -300,7 +301,14 @@ async def get_app():
                     :key="product.id"
                     class="product-card"
                 >
-                    <img :src="product.image" :alt="product.name" class="product-image">
+                    <lottie-player
+                src="static/stickers_animations/burger.json"
+                background="transparent"
+                speed="1"
+                style="width: 120px; height: 120px; margin: 10px auto;"
+                loop
+                autoplay>
+            </lottie-player>
                     <div class="product-name">{{ product.name }}</div>
                     <div class="product-description">{{ product.description }}</div>
                     <div class="product-cook">👨‍🍳 {{ product.cook_name }}</div>
