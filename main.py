@@ -9,7 +9,7 @@ import uuid
 import os
 from datetime import datetime
 
-app = FastAPI(title="Home Food Abu Dhabi")
+app = FastAPI(title="Home Food Abu Dhabi!")
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
