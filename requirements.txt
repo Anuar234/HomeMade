@@ -1,5 +1,28 @@
-fastapi==0.115.0
-uvicorn[standard]==0.30.0
-pydantic==2.9.2
+# FastAPI и основные зависимости
+fastapi==0.104.1
+uvicorn==0.24.0
 python-multipart==0.0.6
-jinja2
+
+# Валидация данных
+pydantic==2.5.0
+email-validator==2.1.0
+
+# CORS middleware (уже включен в FastAPI)
+# python-jose для JWT (если понадобится в будущем)
+python-jose[cryptography]==3.3.0
+
+# Для работы с датами
+python-dateutil==2.8.2
+
+# Тестирование (опционально)
+pytest==7.4.3
+httpx==0.25.2
+
+# Для продакшн развертывания (опционально)
+gunicorn==21.2.0
+
+# Для работы с базой данных SQLite (если понадобится)
+aiosqlite==0.19.0
+
+# Логирование (опционально)
+loguru==0.7.2
