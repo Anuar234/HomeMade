@@ -279,41 +279,61 @@ async def get_app():
 async def get_app_category(category: str):
     return HTMLResponse(f"""
     <!DOCTYPE html>
-    <html lang="ru">
+    <html lang=\"ru\">
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset=\"UTF-8\">
+        <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">
         <title>{{{{ category }}}} - Home Food Abu Dhabi</title>
-        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+        <script src=\"https://unpkg.com/vue@3/dist/vue.global.js\"></script>
         <style>
-            body {{ font-family: sans-serif; padding: 16px; background: #f8f9fa; }}
-            .product-card {{ background:white; border-radius:12px; padding:16px; margin-bottom:16px; box-shadow:0 2px 12px rgba(0,0,0,0.1); }}
+            body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; padding: 16px; background: #f8f9fa; }}
+            .product-card {{ background:white; border-radius:14px; padding:18px; margin-bottom:18px; box-shadow:0 2px 12px rgba(0,0,0,0.10); display:flex; flex-direction:column; align-items:center; }}
+            .product-img {{ width: 160px; height: 120px; object-fit:cover; border-radius:10px; margin-bottom:12px; box-shadow:0 1px 6px rgba(0,0,0,0.08); }}
+            .ingredients-list {{ margin: 10px 0 8px 0; padding: 0; list-style: disc inside; color: #555; font-size: 15px; }}
+            .buy-btn {{ background: #ff9800; color: white; border: none; border-radius: 10px; padding: 12px 28px; font-size: 16px; font-weight: 600; margin-top: 10px; cursor: pointer; transition: background 0.2s; }}
+            .buy-btn:hover {{ background: #e68900; }}
+            .contacts {{ margin-top: 10px; font-size: 15px; color: #333; background: #f1f1f1; border-radius: 8px; padding: 8px 12px; }}
+            .price {{ font-size: 18px; color: #4CAF50; font-weight: bold; margin: 8px 0; }}
         </style>
     </head>
     <body>
-        <div id="app">
-            <h2>Категория: {category}</h2>
-            <div v-for="p in products" :key="p.id" class="product-card">
-                <h3>{{{{ p.name }}}}</h3>
-                <p>{{{{ p.description }}}}</p>
-                <strong>{{{{ p.price }}}} AED</strong>
+        <div id=\"app\">
+            <h2 style=\"margin-bottom:18px;\">Категория: {category}</h2>
+            <div v-for=\"p in products\" :key=\"p.id\" class=\"product-card\">
+                <img :src=\"p.image\" class=\"product-img\" :alt=\"p.name\" />
+                <h3 style=\"margin:10px 0 6px 0;\">{{ p.name }}</h3>
+                <p style=\"margin:0 0 8px 0; color:#666;\">{{ p.description }}</p>
+                <ul class=\"ingredients-list\" v-if=\"p.ingredients\">
+                    <li v-for=\"ing in p.ingredients\" :key=\"ing\">{{ ing }}</li>
+                </ul>
+                <div class=\"price\">{{ p.price }} AED</div>
+                <button class=\"buy-btn\" @click=\"buy(p)\">Купить</button>
+                <div class=\"contacts\">
+                    <div>👩‍🍳 Кулинар: <b>{{ p.cook_name }}</b></div>
+                    <div>📞 Телефон: <a :href=\"'tel:' + p.cook_phone\">{{ p.cook_phone }}</a></div>
+                    <div>💸 Для перевода: <b>{{ p.cook_phone }}</b></div>
+                </div>
             </div>
         </div>
 
-        <script>
+    <script>
         const {{ createApp, ref, onMounted }} = Vue;
         createApp({{
             setup() {{
                 const products = ref([]);
+                const buy = (p) => {{
+                    alert(`Свяжитесь с кулинаром по номеру ${{p.cook_phone}} для оформления заказа и оплаты!`);
+                }};
                 const load = async () => {{
-                    const res = await fetch('/api/products/{category}');
-                    products.value = await res.json();
+                    const res = await fetch('/api/products?category={category}');
+                    let data = await res.json();
+                    products.value = data;
                 }};
                 onMounted(load);
-                return {{ products }};
+                return {{ products, buy }};
             }}
         }}).mount('#app');
-        </script>
+    </script>
     </body>
     </html>
     """)
