@@ -58,7 +58,8 @@ products_db = [
         "image": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300",
         "cook_name": "Анна Петрова",
         "cook_phone": "+971501234567",
-        "category": "Основные блюда"
+        "category": "pelmeni",
+        "ingredients": ["Мука", "Яйцо", "Говядина", "Свинина", "Лук", "Соль", "Перец"]
     },
     {
         "id": "2", 
@@ -68,7 +69,8 @@ products_db = [
         "image": "https://images.unsplash.com/photo-1596040033229-a0b3b7f5c777?w=300",
         "cook_name": "Фарход Алиев",
         "cook_phone": "+971507654321",
-        "category": "Основные блюда"
+        "category": "plov",
+        "ingredients": ["Рис", "Баранина", "Морковь", "Лук", "Чеснок", "Зира", "Масло"]
     },
     {
         "id": "3",
@@ -78,7 +80,8 @@ products_db = [
         "image": "https://images.unsplash.com/photo-1571064247530-4146bc1a081b?w=300",
         "cook_name": "Оксана Коваль",
         "cook_phone": "+971509876543",
-        "category": "Супы"
+        "category": "soup",
+        "ingredients": ["Свекла", "Говядина", "Капуста", "Картофель", "Морковь", "Лук", "Сметана"]
     },
     {
         "id": "4",
@@ -88,7 +91,8 @@ products_db = [
         "image": "https://images.unsplash.com/photo-1627662235973-4d265e175fc1?w=300",
         "cook_name": "Нино Джавахишвили",
         "cook_phone": "+971508765432",
-        "category": "Выпечка"
+        "category": "khachapuri",
+        "ingredients": ["Мука", "Сыр", "Яйцо", "Молоко", "Масло"]
     }
 ]
 
