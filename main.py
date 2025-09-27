@@ -32,6 +32,7 @@ class Product(BaseModel):
     cook_name: str
     cook_phone: str
     category: str
+    ingredients: Optional[List[str]] = []
 
 class OrderItem(BaseModel):
     product_id: str
@@ -341,8 +342,10 @@ async def get_app_category(category: str):
 
 
 @app.get("/api/products", response_model=List[Product])
-async def get_products():
-    """Получить все продукты"""
+async def get_products(category: Optional[str] = None):
+    """Получить все продукты или по категории"""
+    if category:
+        return [p for p in products_db if p["category"].lower() == category.lower()]
     return products_db
 
 
