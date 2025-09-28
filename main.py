@@ -1,18 +1,18 @@
 """
 Главный файл приложения Home Food Abu Dhabi
 """
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.templating import Jinja2Templates
+import os
 
 # Импорты конфигурации и компонентов
 from config import settings
 from api.products import router as products_router
 from api.orders import router as orders_router  
 from api.cart import router as cart_router
-from templates.main_app import get_main_app_template, get_root_page_template
-from templates.category_app import get_category_app_template
 from utils.helpers import get_category_display_name
 
 # Создание приложения FastAPI
@@ -22,12 +22,14 @@ app = FastAPI(
     description="API для сервиса домашней еды в Абу-Даби"
 )
 
+# Настройка шаблонов
+templates = Jinja2Templates(directory="templates")
+
 # Подключение статических файлов
 try:
     app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
 except RuntimeError:
     # Если папка static не существует, создаем заглушку
-    import os
     if not os.path.exists(settings.STATIC_DIR):
         os.makedirs(settings.STATIC_DIR)
     app.mount("/static", StaticFiles(directory=settings.STATIC_DIR), name="static")
@@ -48,22 +50,41 @@ app.include_router(cart_router)
 
 # Основные маршруты приложения
 @app.get("/", response_class=HTMLResponse)
-async def root():
+async def root(request: Request):
     """Главная страница с информацией об API"""
-    return HTMLResponse(get_root_page_template())
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "app_name": settings.APP_NAME,
+        "version": settings.VERSION
+    })
 
 @app.get("/app", response_class=HTMLResponse)
-async def get_app():
+async def get_app(request: Request):
     """Главная страница приложения с категориями"""
-    return HTMLResponse(get_main_app_template())
+    categories = [
+        {"name": "burger", "label": "Бургеры", "icon": "/static/stickers_animations/burger.json"},
+        {"name": "pizza", "label": "Пицца", "icon": "/static/stickers_animations/pizza.json"},
+        {"name": "plov", "label": "Плов", "icon": "/static/stickers_animations/cake.json"},
+        {"name": "soup", "label": "Супы", "icon": "/static/stickers_animations/cookie.json"},
+        {"name": "pelmeni", "label": "Пельмени", "icon": "/static/stickers_animations/pie.json"},
+        {"name": "khachapuri", "label": "Хачапури", "icon": "/static/stickers_animations/donut.json"},
+    ]
+    
+    return templates.TemplateResponse("main_app.html", {
+        "request": request,
+        "categories": categories
+    })
 
 @app.get("/app/{category}", response_class=HTMLResponse)
-async def get_app_category(category: str):
+async def get_app_category(request: Request, category: str):
     """Страница категории товаров"""
     try:
         category_display = get_category_display_name(category)
-        template = get_category_app_template(category, category_display)
-        return HTMLResponse(template)
+        return templates.TemplateResponse("category_app.html", {
+            "request": request,
+            "category": category,
+            "category_display": category_display
+        })
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Ошибка при загрузке страницы: {str(e)}")
 
