@@ -1,72 +1,98 @@
 #!/usr/bin/env python3
 """
-Универсальный скрипт запуска Home Food Abu Dhabi
-Запускает API и Telegram Bot одновременно
+Универсальный запуск Home Food Abu Dhabi
+Запускает FastAPI и Telegram Bot одновременно в одном процессе
+
+ВАЖНО: Обновите Procfile:
+web: python start.py
+
+Это запустит и API, и бота в одном процессе!
 """
 
 import os
 import sys
+import asyncio
 import threading
-import time
+from contextlib import asynccontextmanager
 
-def run_bot():
-    """Запуск Telegram бота в отдельном потоке"""
+print("=" * 50)
+print("🍽️  Home Food Abu Dhabi - Starting...")
+print("=" * 50)
+
+# Проверка переменных окружения
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+PORT = int(os.getenv("PORT", 8000))
+
+if not BOT_TOKEN:
+    print("⚠️  WARNING: BOT_TOKEN not set! Bot will not work.")
+    print("   Set it in Railway environment variables")
+else:
+    print(f"✅ BOT_TOKEN: {BOT_TOKEN[:10]}...")
+
+print(f"✅ PORT: {PORT}")
+print(f"✅ ADMIN_IDS: {os.getenv('ADMIN_IDS', 'Not set')}")
+print("=" * 50)
+
+
+def run_bot_sync():
+    """Запуск бота в синхронном режиме (в отдельном потоке)"""
+    if not BOT_TOKEN:
+        print("❌ Skipping bot - no BOT_TOKEN")
+        return
+    
     try:
-        print("🤖 Запуск Telegram бота...")
-        # Импортируем и запускаем бота
+        print("🤖 Starting Telegram Bot...")
         import bot
         bot.main()
     except Exception as e:
-        print(f"❌ Ошибка бота: {e}")
+        print(f"❌ Bot error: {e}")
         import traceback
         traceback.print_exc()
 
-def run_api():
-    """Запуск API сервера"""
-    try:
-        print("🚀 Запуск API сервера...")
-        import uvicorn
-        port = int(os.getenv("PORT", 8000))
-        
-        # Запускаем uvicorn
-        uvicorn.run(
-            "main:app",
-            host="0.0.0.0",
-            port=port,
-            log_level="info"
-        )
-    except Exception as e:
-        print(f"❌ Ошибка API: {e}")
-        import traceback
-        traceback.print_exc()
 
-def main():
-    """Главная функция"""
-    print("""
-    ╔═══════════════════════════════════════╗
-    ║   🍽️  Home Food Abu Dhabi           ║
-    ║   Платформа домашней еды             ║
-    ╚═══════════════════════════════════════╝
-    """)
-    
-    print("📍 Окружение:")
-    print(f"   PORT: {os.getenv('PORT', '8000')}")
-    print(f"   BOT_TOKEN: {'✅ Установлен' if os.getenv('BOT_TOKEN') else '❌ Не установлен'}")
-    print(f"   ADMIN_IDS: {os.getenv('ADMIN_IDS', 'По умолчанию')}")
-    print()
-    
-    # Запускаем бота в отдельном потоке (daemon=True означает, что поток завершится при завершении основного процесса)
-    bot_thread = threading.Thread(target=run_bot, daemon=True, name="TelegramBot")
+def start_bot_thread():
+    """Запускаем бота в отдельном потоке"""
+    bot_thread = threading.Thread(
+        target=run_bot_sync,
+        daemon=True,
+        name="TelegramBotThread"
+    )
     bot_thread.start()
+    print("✅ Bot thread started")
+    return bot_thread
+
+
+@asynccontextmanager
+async def lifespan(app):
+    """Lifespan events для FastAPI - запускаем бота при старте"""
+    print("🚀 FastAPI starting up...")
     
-    print("✅ Telegram бот запущен в фоновом режиме")
-    print()
+    # Запускаем бота в отдельном потоке
+    bot_thread = start_bot_thread()
     
-    # Небольшая задержка
-    time.sleep(2)
+    yield  # Приложение работает
     
-    # Запускаем API в главном потоке (это важно для Railway)
-    run_api()
+    print("🛑 FastAPI shutting down...")
+
+
+# Импортируем FastAPI app и добавляем lifespan
+from main import app as fastapi_app
+
+# Заменяем lifespan в существующем app
+fastapi_app.router.lifespan_context = lifespan
+
 
 if __name__ == "__main__":
-    main()
+    import uvicorn
+    
+    print(f"🌐 Starting FastAPI on 0.0.0.0:{PORT}")
+    print("=" * 50)
+    
+    # Запускаем FastAPI (бот запустится автоматически через lifespan)
+    uvicorn.run(
+        fastapi_app,
+        host="0.0.0.0",
+        port=PORT,
+        log_level="info",
+        access_log=True
+    )
