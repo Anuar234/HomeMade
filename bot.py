@@ -555,6 +555,27 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             parse_mode='HTML'
         )
 
+def create_application():
+    """Создать и настроить application без запуска"""
+    if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
+        print("❌ ОШИБКА: Установите BOT_TOKEN!")
+        return None
+    
+    # Создаем приложение
+    application = Application.builder().token(BOT_TOKEN).build()
+    
+    # Регистрируем обработчики команд
+    application.add_handler(CommandHandler("start", start))
+    application.add_handler(CommandHandler("help", help_command))
+    application.add_handler(CommandHandler("orders", orders_command))
+    application.add_handler(CommandHandler("pending", pending_command))
+    application.add_handler(CommandHandler("stats", stats_command))
+    
+    # Регистрируем обработчик кнопок
+    application.add_handler(CallbackQueryHandler(button_callback))
+    
+    return application
+
 # === MAIN ===
 def main():
     """Запуск бота"""

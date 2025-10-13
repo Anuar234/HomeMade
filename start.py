@@ -34,16 +34,46 @@ print(f"✅ ADMIN_IDS: {os.getenv('ADMIN_IDS', 'Not set')}")
 print("=" * 50)
 
 
-def run_bot_sync():
-    """Запуск бота в синхронном режиме (в отдельном потоке)"""
+def run_bot_in_thread():
+    """Запуск бота с созданием нового event loop для потока"""
     if not BOT_TOKEN:
         print("❌ Skipping bot - no BOT_TOKEN")
         return
     
     try:
-        print("🤖 Starting Telegram Bot...")
+        print("🤖 Starting Telegram Bot thread...")
+        
+        # КРИТИЧЕСКИ ВАЖНО: создаем новый event loop для этого потока
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Импортируем бота
         import bot
-        bot.main()
+        from telegram import Update
+        
+        print("📊 База данных: homefood.db")
+        print(f"👥 Админы: {bot.ADMIN_IDS}")
+        
+        # Создаем приложение через нашу функцию
+        application = bot.create_application()
+        
+        if not application:
+            print("❌ Не удалось создать bot application")
+            return
+        
+        print("✅ Бот запущен и слушает обновления...")
+        
+        # Запускаем бота асинхронно в текущем event loop
+        async def run_bot_async():
+            async with application:
+                await application.start()
+                await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+                # Держим бота живым
+                await asyncio.Event().wait()
+        
+        # Запускаем
+        loop.run_until_complete(run_bot_async())
+        
     except Exception as e:
         print(f"❌ Bot error: {e}")
         import traceback
@@ -51,9 +81,9 @@ def run_bot_sync():
 
 
 def start_bot_thread():
-    """Запускаем бота в отдельном потоке"""
+    """Запускаем бота в отдельном потоке с daemon=True"""
     bot_thread = threading.Thread(
-        target=run_bot_sync,
+        target=run_bot_in_thread,
         daemon=True,
         name="TelegramBotThread"
     )
