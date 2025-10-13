@@ -17,8 +17,8 @@ from telegram.ext import (
 try:
     from dotenv import load_dotenv
     load_dotenv()
-    BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-    ADMIN_IDS_STR = os.getenv("ADMIN_IDS", "123456789")
+    BOT_TOKEN = os.getenv("BOT_TOKEN", "8349545325:AAFdqJ5Tni7ZzC_owo_8fBQe2n0rXq46m_Q")
+    ADMIN_IDS_STR = os.getenv("ADMIN_IDS", "795821176")
     ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip()]
     DATABASE = os.getenv("DATABASE", "homefood.db")
 except:
