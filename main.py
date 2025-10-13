@@ -7,7 +7,9 @@ from typing import List, Optional
 import json
 import uuid
 import os
+import sqlite3
 from datetime import datetime
+from contextlib import contextmanager
 
 app = FastAPI(title="Home Food Abu Dhabi!")
 
@@ -22,7 +24,168 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Модели данных
+# === DATABASE SETUP ===
+DATABASE = "homefood.db"
+
+@contextmanager
+def get_db():
+    """Контекстный менеджер для работы с БД"""
+    conn = sqlite3.connect(DATABASE)
+    conn.row_factory = sqlite3.Row
+    try:
+        yield conn
+    finally:
+        conn.close()
+
+def init_db():
+    """Инициализация базы данных"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Таблица продуктов
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS products (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                price REAL NOT NULL,
+                image TEXT,
+                cook_name TEXT,
+                cook_phone TEXT,
+                category TEXT,
+                ingredients TEXT
+            )
+        ''')
+        
+        # Таблица заказов
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS orders (
+                id TEXT PRIMARY KEY,
+                customer_name TEXT NOT NULL,
+                customer_phone TEXT NOT NULL,
+                customer_address TEXT,
+                total_amount REAL NOT NULL,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица элементов заказа
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS order_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id TEXT NOT NULL,
+                product_id TEXT NOT NULL,
+                product_name TEXT,
+                quantity INTEGER NOT NULL,
+                price REAL NOT NULL,
+                cook_name TEXT,
+                cook_phone TEXT,
+                FOREIGN KEY (order_id) REFERENCES orders (id),
+                FOREIGN KEY (product_id) REFERENCES products (id)
+            )
+        ''')
+        
+        conn.commit()
+        
+        # Заполняем начальными данными, если таблица пустая
+        cursor.execute('SELECT COUNT(*) as count FROM products')
+        if cursor.fetchone()['count'] == 0:
+            seed_products(conn)
+
+def seed_products(conn):
+    """Заполнение БД начальными данными"""
+    products = [
+        {
+            "id": "1",
+            "name": "Домашние пельмени",
+            "description": "Сочные пельмени с говядиной и свининой, как в России",
+            "price": 25.0,
+            "image": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300",
+            "cook_name": "Анна Петрова",
+            "cook_phone": "+971501234567",
+            "category": "pelmeni",
+            "ingredients": '["Мука", "Яйцо", "Говядина", "Свинина", "Лук", "Соль", "Перец"]'
+        },
+        {
+            "id": "2", 
+            "name": "Узбекский плов",
+            "description": "Настоящий узбекский плов с бараниной и специями",
+            "price": 30.0,
+            "image": "https://images.unsplash.com/photo-1596040033229-a0b3b7f5c777?w=300",
+            "cook_name": "Фарход Алиев",
+            "cook_phone": "+971507654321",
+            "category": "plov",
+            "ingredients": '["Рис", "Баранина", "Морковь", "Лук", "Чеснок", "Зира", "Масло"]'
+        },
+        {
+            "id": "3",
+            "name": "Домашний борщ",
+            "description": "Украинский борщ с говядиной и сметаной",
+            "price": 18.0,
+            "image": "https://images.unsplash.com/photo-1571064247530-4146bc1a081b?w=300",
+            "cook_name": "Оксана Коваль",
+            "cook_phone": "+971509876543",
+            "category": "soup",
+            "ingredients": '["Свекла", "Говядина", "Капуста", "Картофель", "Морковь", "Лук", "Сметана"]'
+        },
+        {
+            "id": "4",
+            "name": "Хачапури по-аджарски",
+            "description": "Грузинский хачапури с сыром и яйцом",
+            "price": 22.0,
+            "image": "https://images.unsplash.com/photo-1627662235973-4d265e175fc1?w=300",
+            "cook_name": "Нино Джавахишвили",
+            "cook_phone": "+971508765432",
+            "category": "khachapuri",
+            "ingredients": '["Мука", "Сыр", "Яйцо", "Молоко", "Масло"]'
+        },
+        {
+            "id": "5",
+            "name": "Домашний бургер",
+            "description": "Сочный бургер с говяжьей котлетой и свежими овощами",
+            "price": 35.0,
+            "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300",
+            "cook_name": "Михаил Сидоров",
+            "cook_phone": "+971501111111",
+            "category": "burger",
+            "ingredients": '["Булочка", "Говядина", "Сыр", "Салат", "Помидор", "Лук", "Соус"]'
+        },
+        {
+            "id": "6",
+            "name": "Пицца Маргарита",
+            "description": "Классическая итальянская пицца с моцареллой и базиликом",
+            "price": 28.0,
+            "image": "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300",
+            "cook_name": "Джованни Росси",
+            "cook_phone": "+971502222222",
+            "category": "pizza",
+            "ingredients": '["Тесто", "Томатный соус", "Моцарелла", "Базилик", "Оливковое масло"]'
+        }
+    ]
+    
+    cursor = conn.cursor()
+    for product in products:
+        cursor.execute('''
+            INSERT INTO products (id, name, description, price, image, cook_name, cook_phone, category, ingredients)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            product['id'],
+            product['name'],
+            product['description'],
+            product['price'],
+            product['image'],
+            product['cook_name'],
+            product['cook_phone'],
+            product['category'],
+            product['ingredients']
+        ))
+    conn.commit()
+
+# Инициализируем БД при старте
+init_db()
+
+# === MODELS ===
 class Product(BaseModel):
     id: str
     name: str
@@ -44,82 +207,11 @@ class Order(BaseModel):
     customer_phone: str
     customer_address: str
     items: List[OrderItem]
-    total_amount: float
+    total_amount: Optional[float] = None
     status: str = "pending"
-    created_at: Optional[datetime] = None
+    created_at: Optional[str] = None
 
-# Временное хранилище
-products_db = [
-    {
-        "id": "1",
-        "name": "Домашние пельмени",
-        "description": "Сочные пельмени с говядиной и свининой, как в России",
-        "price": 25.0,
-        "image": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300",
-        "cook_name": "Анна Петрова",
-        "cook_phone": "+971501234567",
-        "category": "pelmeni",
-        "ingredients": ["Мука", "Яйцо", "Говядина", "Свинина", "Лук", "Соль", "Перец"]
-    },
-    {
-        "id": "2", 
-        "name": "Узбекский плов",
-        "description": "Настоящий узбекский плов с бараниной и специями",
-        "price": 30.0,
-        "image": "https://images.unsplash.com/photo-1596040033229-a0b3b7f5c777?w=300",
-        "cook_name": "Фарход Алиев",
-        "cook_phone": "+971507654321",
-        "category": "plov",
-        "ingredients": ["Рис", "Баранина", "Морковь", "Лук", "Чеснок", "Зира", "Масло"]
-    },
-    {
-        "id": "3",
-        "name": "Домашний борщ",
-        "description": "Украинский борщ с говядиной и сметаной",
-        "price": 18.0,
-        "image": "https://images.unsplash.com/photo-1571064247530-4146bc1a081b?w=300",
-        "cook_name": "Оксана Коваль",
-        "cook_phone": "+971509876543",
-        "category": "soup",
-        "ingredients": ["Свекла", "Говядина", "Капуста", "Картофель", "Морковь", "Лук", "Сметана"]
-    },
-    {
-        "id": "4",
-        "name": "Хачапури по-аджарски",
-        "description": "Грузинский хачапури с сыром и яйцом",
-        "price": 22.0,
-        "image": "https://images.unsplash.com/photo-1627662235973-4d265e175fc1?w=300",
-        "cook_name": "Нино Джавахишвили",
-        "cook_phone": "+971508765432",
-        "category": "khachapuri",
-        "ingredients": ["Мука", "Сыр", "Яйцо", "Молоко", "Масло"]
-    },
-    {
-        "id": "5",
-        "name": "Домашний бургер",
-        "description": "Сочный бургер с говяжьей котлетой и свежими овощами",
-        "price": 35.0,
-        "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300",
-        "cook_name": "Михаил Сидоров",
-        "cook_phone": "+971501111111",
-        "category": "burger",
-        "ingredients": ["Булочка", "Говядина", "Сыр", "Салат", "Помидор", "Лук", "Соус"]
-    },
-    {
-        "id": "6",
-        "name": "Пицца Маргарита",
-        "description": "Классическая итальянская пицца с моцареллой и базиликом",
-        "price": 28.0,
-        "image": "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300",
-        "cook_name": "Джованни Росси",
-        "cook_phone": "+971502222222",
-        "category": "pizza",
-        "ingredients": ["Тесто", "Томатный соус", "Моцарелла", "Базилик", "Оливковое масло"]
-    }
-]
-
-orders_db = []
-cart_db = {}  # Простая корзина в памяти
+# === ROUTES ===
 
 @app.get("/", response_class=HTMLResponse)
 async def root():
@@ -136,6 +228,10 @@ async def root():
             <br><br>
             <a href="/api/products" style="background: #28a745; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 10px; display: inline-block;">
                 📋 API продуктов
+            </a>
+            <br><br>
+            <a href="/api/orders" style="background: #ffc107; color: white; padding: 15px 30px; text-decoration: none; border-radius: 8px; margin: 10px; display: inline-block;">
+                📦 Все заказы
             </a>
         </div>
     </body>
@@ -280,7 +376,7 @@ async def get_app():
         </lottie-player>
 
         <button class="category-btn" @click="goToCategory(cat)">
-            {{cat.label}}
+            {{ cat.label }}
         </button>
     </div>
 </div>
@@ -315,7 +411,6 @@ async def get_app():
 
 @app.get("/app/{category}")
 async def get_app_category(category: str):
-    # Category display names mapping
     category_names = {
         "burger": "Бургеры",
         "pizza": "Пицца", 
@@ -552,6 +647,12 @@ async def get_app_category(category: str):
                 box-shadow: 0 4px 15px rgba(76,175,80,0.4);
             }}
             
+            .add-to-cart-btn:disabled {{
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+            }}
+            
             .contact-btn {{
                 background: #ff9800;
                 color: white;
@@ -635,6 +736,33 @@ async def get_app_category(category: str):
                 border-bottom: 1px solid #eee;
             }}
             
+            .form-group {{
+                margin-bottom: 20px;
+            }}
+            
+            .form-label {{
+                display: block;
+                margin-bottom: 8px;
+                font-weight: 600;
+                color: #333;
+                font-size: 14px;
+            }}
+            
+            .form-input {{
+                width: 100%;
+                padding: 12px;
+                border: 2px solid #e0e0e0;
+                border-radius: 10px;
+                font-size: 14px;
+                transition: border-color 0.3s;
+                box-sizing: border-box;
+            }}
+            
+            .form-input:focus {{
+                outline: none;
+                border-color: #4CAF50;
+            }}
+            
             .checkout-btn {{
                 width: 100%;
                 background: linear-gradient(45deg, #ff6b6b, #ee5a6f);
@@ -652,6 +780,47 @@ async def get_app_category(category: str):
             .checkout-btn:hover {{
                 transform: translateY(-2px);
                 box-shadow: 0 5px 20px rgba(255,107,107,0.4);
+            }}
+            
+            .checkout-btn:disabled {{
+                background: #ccc;
+                cursor: not-allowed;
+                transform: none;
+            }}
+            
+            .back-to-cart-btn {{
+                width: 100%;
+                background: #6c63ff;
+                color: white;
+                border: none;
+                border-radius: 15px;
+                padding: 12px;
+                font-size: 14px;
+                cursor: pointer;
+                margin-top: 10px;
+                transition: all 0.3s ease;
+            }}
+            
+            .back-to-cart-btn:hover {{
+                background: #5a52d5;
+            }}
+            
+            .success-message {{
+                background: #4CAF50;
+                color: white;
+                padding: 15px;
+                border-radius: 10px;
+                margin-bottom: 20px;
+                text-align: center;
+            }}
+            
+            .error-message {{
+                background: #ff6b6b;
+                color: white;
+                padding: 15px;
+                border-radius: 10px;
+                margin-bottom: 20px;
+                text-align: center;
             }}
             
             @media (max-width: 480px) {{
@@ -674,7 +843,7 @@ async def get_app_category(category: str):
         <div id="app">
             <div class="header">
                 <button class="back-btn" @click="goBack">← Назад</button>
-                <h2>{{{{ categoryName }}</h2>
+                <h2>{{{{ categoryName }}}}</h2>
             </div>
             
             <div class="products-container">
@@ -688,8 +857,8 @@ async def get_app_category(category: str):
                     <div class="product-header">
                         <img :src="p.image" class="product-img" :alt="p.name" />
                         <div class="product-info">
-                            <h3 class="product-name">{{{{ p.name }}</h3>
-                            <p class="product-description">{{{{ p.description }}</p>
+                            <h3 class="product-name">{{{{ p.name }}}}</h3>
+                            <p class="product-description">{{{{ p.description }}}}</p>
                             <div class="price">{{{{ p.price }}}} AED</div>
                         </div>
                     </div>
@@ -731,7 +900,7 @@ async def get_app_category(category: str):
             </div>
             
             <!-- Модальное окно корзины -->
-            <div v-if="showCart" class="modal" @click="showCart = false">
+            <div v-if="showCart && !showCheckoutForm" class="modal" @click="showCart = false">
                 <div class="modal-content" @click.stop>
                     <div class="modal-header">
                         <h3>🛒 Корзина</h3>
@@ -752,9 +921,80 @@ async def get_app_category(category: str):
                         Итого: {{{{ cartTotal.toFixed(1) }}}} AED
                     </div>
                     
-                    <button class="checkout-btn" @click="checkout">
+                    <button class="checkout-btn" @click="proceedToCheckout">
                         ✨ Оформить заказ
                     </button>
+                </div>
+            </div>
+            
+            <!-- Модальное окно оформления заказа -->
+            <div v-if="showCheckoutForm" class="modal" @click="cancelCheckout">
+                <div class="modal-content" @click.stop>
+                    <div class="modal-header">
+                        <h3>📝 Оформление заказа</h3>
+                        <button class="modal-close" @click="cancelCheckout">&times;</button>
+                    </div>
+                    
+                    <div v-if="orderSuccess" class="success-message">
+                        ✅ Заказ #{{{{ orderSuccess }}}} успешно создан!
+                    </div>
+                    
+                    <div v-if="orderError" class="error-message">
+                        ❌ {{{{ orderError }}}}
+                    </div>
+                    
+                    <form @submit.prevent="submitOrder">
+                        <div class="form-group">
+                            <label class="form-label">👤 Ваше имя *</label>
+                            <input 
+                                type="text" 
+                                class="form-input" 
+                                v-model="customerInfo.name"
+                                placeholder="Введите ваше имя"
+                                required
+                            />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">📱 Телефон *</label>
+                            <input 
+                                type="tel" 
+                                class="form-input" 
+                                v-model="customerInfo.phone"
+                                placeholder="+971501234567"
+                                required
+                            />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">📍 Адрес доставки *</label>
+                            <input 
+                                type="text" 
+                                class="form-input" 
+                                v-model="customerInfo.address"
+                                placeholder="Район, улица, дом"
+                                required
+                            />
+                        </div>
+                        
+                        <div style="background: #f5f5f5; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                            <strong>Ваш заказ:</strong>
+                            <div v-for="item in cartItems" :key="item.id" style="margin-top: 10px;">
+                                {{{{ item.name }}}} × {{{{ item.quantity }}}} = {{{{ (item.price * item.quantity).toFixed(1) }}}} AED
+                            </div>
+                            <div style="margin-top: 10px; font-size: 18px; font-weight: bold; color: #4CAF50;">
+                                Итого: {{{{ cartTotal.toFixed(1) }}}} AED
+                            </div>
+                        </div>
+                        
+                        <button type="submit" class="checkout-btn" :disabled="isSubmitting">
+                            {{{{ isSubmitting ? '⏳ Оформляем...' : '✅ Подтвердить заказ' }}}}
+                        </button>
+                        
+                        <button type="button" class="back-to-cart-btn" @click="backToCart">
+                            ← Вернуться в корзину
+                        </button>
+                    </form>
                 </div>
             </div>
         </div>
@@ -767,7 +1007,17 @@ async def get_app_category(category: str):
                 const quantities = ref({{}});
                 const cart = ref([]);
                 const showCart = ref(false);
+                const showCheckoutForm = ref(false);
+                const isSubmitting = ref(false);
+                const orderSuccess = ref(null);
+                const orderError = ref(null);
                 const categoryName = ref('{category_display}');
+                
+                const customerInfo = ref({{
+                    name: '',
+                    phone: '',
+                    address: ''
+                }});
 
                 const cartItems = computed(() => cart.value);
                 const cartTotal = computed(() => cart.value.reduce((sum, item) => sum + (item.price * item.quantity), 0));
@@ -812,38 +1062,102 @@ async def get_app_category(category: str):
                     window.open(whatsappUrl, '_blank');
                 }};
 
-                const checkout = () => {{
+                const proceedToCheckout = () => {{
+                    showCart.value = false;
+                    showCheckoutForm.value = true;
+                    orderSuccess.value = null;
+                    orderError.value = null;
+                }};
+
+                const backToCart = () => {{
+                    showCheckoutForm.value = false;
+                    showCart.value = true;
+                }};
+
+                const cancelCheckout = () => {{
+                    showCheckoutForm.value = false;
+                    customerInfo.value = {{ name: '', phone: '', address: '' }};
+                    orderSuccess.value = null;
+                    orderError.value = null;
+                }};
+
+                const submitOrder = async () => {{
                     if (cart.value.length === 0) return;
                     
-                    // Группировка по поварам
-                    const ordersByCook = {{}};
-                    cart.value.forEach(item => {{
-                        if (!ordersByCook[item.cook_phone]) {{
-                            ordersByCook[item.cook_phone] = {{
-                                cook_name: item.cook_name,
-                                cook_phone: item.cook_phone,
-                                items: []
-                            }};
-                        }}
-                        ordersByCook[item.cook_phone].items.push(item);
-                    }});
-
-                    // Отправка заказов каждому повару
-                    Object.values(ordersByCook).forEach(order => {{
-                        const orderText = order.items.map(item => 
-                            `${{item.name}} x${{item.quantity}} = ${{(item.price * item.quantity).toFixed(1)}} AED`
-                        ).join('\\n');
+                    isSubmitting.value = true;
+                    orderError.value = null;
+                    
+                    try {{
+                        // Подготавливаем данные заказа
+                        const orderData = {{
+                            customer_name: customerInfo.value.name,
+                            customer_phone: customerInfo.value.phone,
+                            customer_address: customerInfo.value.address,
+                            items: cart.value.map(item => ({{
+                                product_id: item.id,
+                                quantity: item.quantity
+                            }})),
+                            total_amount: cartTotal.value,
+                            status: "pending"
+                        }};
                         
-                        const total = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                        const message = `🛒 ЗАКАЗ\\n\\n${{orderText}}\\n\\n💰 Итого: ${{total.toFixed(1)}} AED\\n\\nПожалуйста, подтвердите заказ!`;
-                        const whatsappUrl = `https://wa.me/${{order.cook_phone.replace(/[^0-9]/g, '')}}?text=${{encodeURIComponent(message)}}`;
-                        window.open(whatsappUrl, '_blank');
-                    }});
+                        // Отправляем заказ в API
+                        const response = await fetch('/api/orders', {{
+                            method: 'POST',
+                            headers: {{
+                                'Content-Type': 'application/json'
+                            }},
+                            body: JSON.stringify(orderData)
+                        }});
+                        
+                        if (!response.ok) {{
+                            throw new Error('Ошибка при создании заказа');
+                        }}
+                        
+                        const savedOrder = await response.json();
+                        
+                        // Показываем успешное сообщение
+                        orderSuccess.value = savedOrder.id;
+                        
+                        // Отправляем уведомления в WhatsApp каждому повару
+                        const ordersByCook = {{}};
+                        cart.value.forEach(item => {{
+                            if (!ordersByCook[item.cook_phone]) {{
+                                ordersByCook[item.cook_phone] = {{
+                                    cook_name: item.cook_name,
+                                    cook_phone: item.cook_phone,
+                                    items: []
+                                }};
+                            }}
+                            ordersByCook[item.cook_phone].items.push(item);
+                        }});
 
-                    // Очистка корзины
-                    cart.value = [];
-                    showCart.value = false;
-                    alert('Заказ отправлен! Повара свяжутся с вами в WhatsApp.');
+                        Object.values(ordersByCook).forEach(order => {{
+                            const orderText = order.items.map(item => 
+                                `${{item.name}} x${{item.quantity}} = ${{(item.price * item.quantity).toFixed(1)}} AED`
+                            ).join('\\n');
+                            
+                            const total = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                            const message = `🛒 НОВЫЙ ЗАКАЗ #${{savedOrder.id}}\\n\\n👤 ${{customerInfo.value.name}}\\n📱 ${{customerInfo.value.phone}}\\n📍 ${{customerInfo.value.address}}\\n\\n${{orderText}}\\n\\n💰 Итого: ${{total.toFixed(1)}} AED\\n\\nПожалуйста, подтвердите заказ!`;
+                            const whatsappUrl = `https://wa.me/${{order.cook_phone.replace(/[^0-9]/g, '')}}?text=${{encodeURIComponent(message)}}`;
+                            window.open(whatsappUrl, '_blank');
+                        }});
+                        
+                        // Очищаем корзину через 2 секунды
+                        setTimeout(() => {{
+                            cart.value = [];
+                            customerInfo.value = {{ name: '', phone: '', address: '' }};
+                            showCheckoutForm.value = false;
+                            orderSuccess.value = null;
+                            alert(`✅ Заказ #${{savedOrder.id}} успешно создан!\\n\\nПовара получили уведомление и свяжутся с вами в WhatsApp.`);
+                        }}, 2000);
+                        
+                    }} catch (error) {{
+                        console.error('Ошибка:', error);
+                        orderError.value = 'Произошла ошибка при создании заказа. Попробуйте еще раз.';
+                    }} finally {{
+                        isSubmitting.value = false;
+                    }}
                 }};
 
                 const goBack = () => {{
@@ -871,7 +1185,12 @@ async def get_app_category(category: str):
                     quantities, 
                     cart,
                     showCart,
+                    showCheckoutForm,
+                    isSubmitting,
+                    orderSuccess,
+                    orderError,
                     categoryName,
+                    customerInfo,
                     cartItems,
                     cartTotal,
                     cartItemsCount,
@@ -880,7 +1199,10 @@ async def get_app_category(category: str):
                     decreaseQuantity,
                     addToCart,
                     contactCook,
-                    checkout,
+                    proceedToCheckout,
+                    backToCart,
+                    cancelCheckout,
+                    submitOrder,
                     goBack
                 }};
             }}
@@ -893,66 +1215,225 @@ async def get_app_category(category: str):
 
 @app.get("/api/products", response_model=List[Product])
 async def get_products(category: Optional[str] = None):
-    """Получить все продукты или по категории"""
-    if category:
-        return [p for p in products_db if p["category"].lower() == category.lower()]
-    return products_db
+    """Получить все продукты или по категории из БД"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        if category:
+            cursor.execute(
+                'SELECT * FROM products WHERE LOWER(category) = LOWER(?)',
+                (category,)
+            )
+        else:
+            cursor.execute('SELECT * FROM products')
+        
+        rows = cursor.fetchall()
+        
+        products = []
+        for row in rows:
+            product = dict(row)
+            # Парсим JSON ingredients
+            if product['ingredients']:
+                product['ingredients'] = json.loads(product['ingredients'])
+            else:
+                product['ingredients'] = []
+            products.append(product)
+        
+        return products
 
 
 @app.get("/api/products/{product_id}", response_model=Product)
 async def get_product(product_id: str):
-    """Получить конкретный продукт"""
-    product = next((p for p in products_db if p["id"] == product_id), None)
-    if not product:
-        raise HTTPException(status_code=404, detail="Product not found")
-    return product
+    """Получить конкретный продукт из БД"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM products WHERE id = ?', (product_id,))
+        row = cursor.fetchone()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Product not found")
+        
+        product = dict(row)
+        if product['ingredients']:
+            product['ingredients'] = json.loads(product['ingredients'])
+        else:
+            product['ingredients'] = []
+        
+        return product
+
 
 @app.post("/api/orders", response_model=Order)
 async def create_order(order: Order):
-    """Создать новый заказ"""
-    order.id = str(uuid.uuid4())
-    order.created_at = datetime.now()
+    """Создать новый заказ в БД"""
+    order_id = str(uuid.uuid4())
+    created_at = datetime.now()
     
+    # Вычисляем общую сумму
     total = 0
-    for item in order.items:
-        product = next((p for p in products_db if p["id"] == item.product_id), None)
-        if product:
-            total += product["price"] * item.quantity
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        for item in order.items:
+            cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
+            row = cursor.fetchone()
+            if row:
+                total += row['price'] * item.quantity
+        
+        # Сохраняем заказ
+        cursor.execute('''
+            INSERT INTO orders (id, customer_name, customer_phone, customer_address, total_amount, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            order_id,
+            order.customer_name,
+            order.customer_phone,
+            order.customer_address,
+            total,
+            order.status,
+            created_at.isoformat()
+        ))
+        
+        # Сохраняем элементы заказа с информацией о продукте и поваре
+        for item in order.items:
+            cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
+            row = cursor.fetchone()
+            if row:
+                cursor.execute('''
+                    INSERT INTO order_items (order_id, product_id, product_name, quantity, price, cook_name, cook_phone)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                ''', (
+                    order_id,
+                    item.product_id,
+                    row['name'],
+                    item.quantity,
+                    row['price'],
+                    row['cook_name'],
+                    row['cook_phone']
+                ))
+        
+        conn.commit()
     
+    order.id = order_id
     order.total_amount = total
-    
-    order_dict = order.dict()
-    order_dict["created_at"] = order.created_at.isoformat()
-    orders_db.append(order_dict)
+    order.created_at = created_at.isoformat()
     
     return order
 
-@app.post("/api/cart/add")
-async def add_to_cart(product_id: str, quantity: int = 1):
-    """Добавить товар в корзину"""
-    if product_id not in cart_db:
-        cart_db[product_id] = 0
-    cart_db[product_id] += quantity
-    return {"message": "Added to cart", "cart": cart_db}
 
-@app.get("/api/cart")
-async def get_cart():
-    """Получить содержимое корзины"""
-    cart_items = []
-    for product_id, quantity in cart_db.items():
-        product = next((p for p in products_db if p["id"] == product_id), None)
-        if product:
-            cart_items.append({
-                **product,
-                "quantity": quantity
-            })
-    return cart_items
+@app.get("/api/orders")
+async def get_orders():
+    """Получить все заказы из БД"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute('''
+            SELECT o.*, 
+                   GROUP_CONCAT(
+                       oi.product_id || ':' || oi.product_name || ':' || 
+                       oi.quantity || ':' || oi.price || ':' || 
+                       oi.cook_name || ':' || oi.cook_phone
+                   ) as items_data
+            FROM orders o
+            LEFT JOIN order_items oi ON o.id = oi.order_id
+            GROUP BY o.id
+            ORDER BY o.created_at DESC
+        ''')
+        
+        rows = cursor.fetchall()
+        
+        orders = []
+        for row in rows:
+            order = dict(row)
+            
+            # Парсим items
+            items = []
+            if order['items_data']:
+                for item_str in order['items_data'].split(','):
+                    parts = item_str.split(':')
+                    items.append({{
+                        'product_id': parts[0],
+                        'product_name': parts[1],
+                        'quantity': int(parts[2]),
+                        'price': float(parts[3]),
+                        'cook_name': parts[4] if len(parts) > 4 else '',
+                        'cook_phone': parts[5] if len(parts) > 5 else ''
+                    }})
+            
+            order['items'] = items
+            del order['items_data']
+            
+            orders.append(order)
+        
+        return orders
 
-@app.delete("/api/cart/clear")
-async def clear_cart():
-    """Очистить корзину"""
-    cart_db.clear()
-    return {"message": "Cart cleared"}
+
+@app.get("/api/orders/{order_id}")
+async def get_order(order_id: str):
+    """Получить конкретный заказ из БД"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+        order_row = cursor.fetchone()
+        
+        if not order_row:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        order = dict(order_row)
+        
+        # Получаем items
+        cursor.execute('''
+            SELECT oi.*, p.name as product_name
+            FROM order_items oi
+            LEFT JOIN products p ON oi.product_id = p.id
+            WHERE oi.order_id = ?
+        ''', (order_id,))
+        
+        items = [dict(row) for row in cursor.fetchall()]
+        order['items'] = items
+        
+        return order
+
+
+@app.put("/api/orders/{order_id}/status")
+async def update_order_status(order_id: str, status: str):
+    """Обновить статус заказа"""
+    valid_statuses = ['pending', 'confirmed', 'cooking', 'ready', 'delivered', 'cancelled']
+    
+    if status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {{valid_statuses}}")
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('UPDATE orders SET status = ? WHERE id = ?', (status, order_id))
+        
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        conn.commit()
+    
+    return {{"message": "Order status updated", "order_id": order_id, "status": status}}
+
+
+@app.delete("/api/orders/{order_id}")
+async def delete_order(order_id: str):
+    """Удалить заказ из БД"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Удаляем items заказа
+        cursor.execute('DELETE FROM order_items WHERE order_id = ?', (order_id,))
+        
+        # Удаляем сам заказ
+        cursor.execute('DELETE FROM orders WHERE id = ?', (order_id,))
+        
+        if cursor.rowcount == 0:
+            raise HTTPException(status_code=404, detail="Order not found")
+        
+        conn.commit()
+    
+    return {{"message": "Order deleted", "order_id": order_id}}
+
 
 if __name__ == "__main__":
     import uvicorn
