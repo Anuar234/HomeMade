@@ -10,7 +10,6 @@ import os
 import sqlite3
 from datetime import datetime
 from contextlib import contextmanager
-import httpx
 
 app = FastAPI(title="Home Food Abu Dhabi!")
 
@@ -24,50 +23,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# === TELEGRAM NOTIFICATION SETUP ===
-BOT_TOKEN = os.getenv("BOT_TOKEN", "YOUR_BOT_TOKEN_HERE")
-ADMIN_IDS_STR = os.getenv("ADMIN_IDS", "")
-ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip()] if ADMIN_IDS_STR else []
-
-async def send_telegram_notification(order_data: dict):
-    """Отправка уведомления о новом заказе в Telegram"""
-    if not BOT_TOKEN or BOT_TOKEN == "YOUR_BOT_TOKEN_HERE" or not ADMIN_IDS:
-        print("⚠️ Telegram уведомления не настроены")
-        return
-    
-    # Формируем сообщение
-    message = f"""
-🛒 <b>НОВЫЙ ЗАКАЗ #{order_data['id'][:8]}</b>
-
-👤 <b>Telegram:</b> @{order_data['customer_telegram']}
-📍 <b>Адрес:</b> {order_data['customer_address']}
-
-🛍️ <b>Состав заказа:</b>
-"""
-    
-    for item in order_data['items']:
-        message += f"  • {item['product_name']} x{item['quantity']} = {item['subtotal']:.1f} AED\n"
-    
-    message += f"\n💰 <b>Итого:</b> {order_data['total_amount']:.1f} AED"
-    
-    # Отправляем уведомление каждому админу
-    async with httpx.AsyncClient() as client:
-        for admin_id in ADMIN_IDS:
-            try:
-                url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-                data = {
-                    "chat_id": admin_id,
-                    "text": message,
-                    "parse_mode": "HTML"
-                }
-                response = await client.post(url, json=data)
-                if response.status_code == 200:
-                    print(f"✅ Уведомление отправлено админу {admin_id}")
-                else:
-                    print(f"❌ Ошибка отправки админу {admin_id}: {response.text}")
-            except Exception as e:
-                print(f"❌ Ошибка отправки уведомления: {e}")
 
 # === DATABASE SETUP ===
 DATABASE = "homefood.db"
@@ -102,11 +57,12 @@ def init_db():
             )
         ''')
         
-        # Таблица заказов - обновляем для Telegram
+        # Таблица заказов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS orders (
                 id TEXT PRIMARY KEY,
-                customer_telegram TEXT NOT NULL,
+                customer_name TEXT NOT NULL,
+                customer_phone TEXT NOT NULL,
                 customer_address TEXT,
                 total_amount REAL NOT NULL,
                 status TEXT DEFAULT 'pending',
@@ -247,7 +203,8 @@ class OrderItem(BaseModel):
 
 class Order(BaseModel):
     id: Optional[str] = None
-    customer_telegram: str
+    customer_name: str
+    customer_phone: str
     customer_address: str
     items: List[OrderItem]
     total_amount: Optional[float] = None
@@ -696,6 +653,22 @@ async def get_app_category(category: str):
                 transform: none;
             }}
             
+            .contact-btn {{
+                background: #ff9800;
+                color: white;
+                border: none;
+                border-radius: 12px;
+                padding: 12px 20px;
+                font-size: 14px;
+                cursor: pointer;
+                transition: all 0.3s ease;
+            }}
+            
+            .contact-btn:hover {{
+                background: #e68900;
+                transform: translateY(-2px);
+            }}
+            
             .cook-info {{
                 background: rgba(255,245,230,0.8);
                 border-radius: 12px;
@@ -909,6 +882,9 @@ async def get_app_category(category: str):
                         <button class="add-to-cart-btn" @click="addToCart(p)" :disabled="getQuantity(p.id) === 0">
                             🛒 Добавить в корзину ({{{{ (p.price * getQuantity(p.id)).toFixed(1) }}}} AED)
                         </button>
+                        <button class="contact-btn" @click="contactCook(p)">
+                            📞
+                        </button>
                     </div>
                     
                     <div class="cook-info">
@@ -961,7 +937,6 @@ async def get_app_category(category: str):
                     
                     <div v-if="orderSuccess" class="success-message">
                         ✅ Заказ #{{{{ orderSuccess }}}} успешно создан!
-                        <br>Администратор получил уведомление в Telegram
                     </div>
                     
                     <div v-if="orderError" class="error-message">
@@ -970,12 +945,23 @@ async def get_app_category(category: str):
                     
                     <form @submit.prevent="submitOrder">
                         <div class="form-group">
-                            <label class="form-label">📱 Ваш Telegram (без @) *</label>
+                            <label class="form-label">👤 Ваше имя *</label>
                             <input 
                                 type="text" 
                                 class="form-input" 
-                                v-model="customerInfo.telegram"
-                                placeholder="username"
+                                v-model="customerInfo.name"
+                                placeholder="Введите ваше имя"
+                                required
+                            />
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label">📱 Телефон *</label>
+                            <input 
+                                type="tel" 
+                                class="form-input" 
+                                v-model="customerInfo.phone"
+                                placeholder="+971501234567"
                                 required
                             />
                         </div>
@@ -986,7 +972,7 @@ async def get_app_category(category: str):
                                 type="text" 
                                 class="form-input" 
                                 v-model="customerInfo.address"
-                                placeholder="Район, улица, дом, квартира"
+                                placeholder="Район, улица, дом"
                                 required
                             />
                         </div>
@@ -1028,7 +1014,8 @@ async def get_app_category(category: str):
                 const categoryName = ref('{category_display}');
                 
                 const customerInfo = ref({{
-                    telegram: '',
+                    name: '',
+                    phone: '',
                     address: ''
                 }});
 
@@ -1069,6 +1056,12 @@ async def get_app_category(category: str):
                     }}
                 }};
 
+                const contactCook = (product) => {{
+                    const message = `Здравствуйте! Интересует "${{product.name}}" за ${{product.price}} AED. Можно оформить заказ?`;
+                    const whatsappUrl = `https://wa.me/${{product.cook_phone.replace(/[^0-9]/g, '')}}?text=${{encodeURIComponent(message)}}`;
+                    window.open(whatsappUrl, '_blank');
+                }};
+
                 const proceedToCheckout = () => {{
                     showCart.value = false;
                     showCheckoutForm.value = true;
@@ -1083,7 +1076,7 @@ async def get_app_category(category: str):
 
                 const cancelCheckout = () => {{
                     showCheckoutForm.value = false;
-                    customerInfo.value = {{ telegram: '', address: '' }};
+                    customerInfo.value = {{ name: '', phone: '', address: '' }};
                     orderSuccess.value = null;
                     orderError.value = null;
                 }};
@@ -1095,12 +1088,10 @@ async def get_app_category(category: str):
                     orderError.value = null;
                     
                     try {{
-                        // Убираем @ если пользователь его добавил
-                        const telegram = customerInfo.value.telegram.replace('@', '');
-                        
                         // Подготавливаем данные заказа
                         const orderData = {{
-                            customer_telegram: telegram,
+                            customer_name: customerInfo.value.name,
+                            customer_phone: customerInfo.value.phone,
                             customer_address: customerInfo.value.address,
                             items: cart.value.map(item => ({{
                                 product_id: item.id,
@@ -1126,16 +1117,40 @@ async def get_app_category(category: str):
                         const savedOrder = await response.json();
                         
                         // Показываем успешное сообщение
-                        orderSuccess.value = savedOrder.id.substring(0, 8);
+                        orderSuccess.value = savedOrder.id;
                         
-                        // Очищаем корзину через 3 секунды
+                        // Отправляем уведомления в WhatsApp каждому повару
+                        const ordersByCook = {{}};
+                        cart.value.forEach(item => {{
+                            if (!ordersByCook[item.cook_phone]) {{
+                                ordersByCook[item.cook_phone] = {{
+                                    cook_name: item.cook_name,
+                                    cook_phone: item.cook_phone,
+                                    items: []
+                                }};
+                            }}
+                            ordersByCook[item.cook_phone].items.push(item);
+                        }});
+
+                        Object.values(ordersByCook).forEach(order => {{
+                            const orderText = order.items.map(item => 
+                                `${{item.name}} x${{item.quantity}} = ${{(item.price * item.quantity).toFixed(1)}} AED`
+                            ).join('\\n');
+                            
+                            const total = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+                            const message = `🛒 НОВЫЙ ЗАКАЗ #${{savedOrder.id}}\\n\\n👤 ${{customerInfo.value.name}}\\n📱 ${{customerInfo.value.phone}}\\n📍 ${{customerInfo.value.address}}\\n\\n${{orderText}}\\n\\n💰 Итого: ${{total.toFixed(1)}} AED\\n\\nПожалуйста, подтвердите заказ!`;
+                            const whatsappUrl = `https://wa.me/${{order.cook_phone.replace(/[^0-9]/g, '')}}?text=${{encodeURIComponent(message)}}`;
+                            window.open(whatsappUrl, '_blank');
+                        }});
+                        
+                        // Очищаем корзину через 2 секунды
                         setTimeout(() => {{
                             cart.value = [];
-                            customerInfo.value = {{ telegram: '', address: '' }};
+                            customerInfo.value = {{ name: '', phone: '', address: '' }};
                             showCheckoutForm.value = false;
                             orderSuccess.value = null;
-                            alert(`✅ Заказ успешно создан!\\n\\nАдминистратор получил уведомление в Telegram и свяжется с вами @${{telegram}}`);
-                        }}, 3000);
+                            alert(`✅ Заказ #${{savedOrder.id}} успешно создан!\\n\\nПовара получили уведомление и свяжутся с вами в WhatsApp.`);
+                        }}, 2000);
                         
                     }} catch (error) {{
                         console.error('Ошибка:', error);
@@ -1183,6 +1198,7 @@ async def get_app_category(category: str):
                     increaseQuantity, 
                     decreaseQuantity,
                     addToCart,
+                    contactCook,
                     proceedToCheckout,
                     backToCart,
                     cancelCheckout,
@@ -1226,7 +1242,7 @@ async def get_products(category: Optional[str] = None):
         return products
 
 
-@app.get("/api/products/{{product_id}}", response_model=Product)
+@app.get("/api/products/{product_id}", response_model=Product)
 async def get_product(product_id: str):
     """Получить конкретный продукт из БД"""
     with get_db() as conn:
@@ -1248,14 +1264,12 @@ async def get_product(product_id: str):
 
 @app.post("/api/orders", response_model=Order)
 async def create_order(order: Order):
-    """Создать новый заказ в БД и отправить уведомление в Telegram"""
+    """Создать новый заказ в БД"""
     order_id = str(uuid.uuid4())
     created_at = datetime.now()
     
     # Вычисляем общую сумму
     total = 0
-    order_items_details = []
-    
     with get_db() as conn:
         cursor = conn.cursor()
         
@@ -1263,22 +1277,16 @@ async def create_order(order: Order):
             cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
             row = cursor.fetchone()
             if row:
-                subtotal = row['price'] * item.quantity
-                total += subtotal
-                order_items_details.append({{
-                    'product_name': row['name'],
-                    'quantity': item.quantity,
-                    'price': row['price'],
-                    'subtotal': subtotal
-                }})
+                total += row['price'] * item.quantity
         
         # Сохраняем заказ
         cursor.execute('''
-            INSERT INTO orders (id, customer_telegram, customer_address, total_amount, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?)
+            INSERT INTO orders (id, customer_name, customer_phone, customer_address, total_amount, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (
             order_id,
-            order.customer_telegram,
+            order.customer_name,
+            order.customer_phone,
             order.customer_address,
             total,
             order.status,
@@ -1304,17 +1312,6 @@ async def create_order(order: Order):
                 ))
         
         conn.commit()
-    
-    # Отправляем уведомление в Telegram
-    notification_data = {{
-        'id': order_id,
-        'customer_telegram': order.customer_telegram,
-        'customer_address': order.customer_address,
-        'items': order_items_details,
-        'total_amount': total
-    }}
-    
-    await send_telegram_notification(notification_data)
     
     order.id = order_id
     order.total_amount = total
@@ -1370,7 +1367,7 @@ async def get_orders():
         return orders
 
 
-@app.get("/api/orders/{{order_id}}")
+@app.get("/api/orders/{order_id}")
 async def get_order(order_id: str):
     """Получить конкретный заказ из БД"""
     with get_db() as conn:
@@ -1398,7 +1395,7 @@ async def get_order(order_id: str):
         return order
 
 
-@app.put("/api/orders/{{order_id}}/status")
+@app.put("/api/orders/{order_id}/status")
 async def update_order_status(order_id: str, status: str):
     """Обновить статус заказа"""
     valid_statuses = ['pending', 'confirmed', 'cooking', 'ready', 'delivered', 'cancelled']
@@ -1418,7 +1415,7 @@ async def update_order_status(order_id: str, status: str):
     return {{"message": "Order status updated", "order_id": order_id, "status": status}}
 
 
-@app.delete("/api/orders/{{order_id}}")
+@app.delete("/api/orders/{order_id}")
 async def delete_order(order_id: str):
     """Удалить заказ из БД"""
     with get_db() as conn:

@@ -1,6 +1,7 @@
 import asyncio
 import sqlite3
 import os
+import json
 from datetime import datetime
 from contextlib import contextmanager
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -11,6 +12,7 @@ from telegram.ext import (
     ContextTypes,
     MessageHandler,
     filters,
+    ConversationHandler,
 )
 
 # Попытка загрузить из .env файла
@@ -22,10 +24,13 @@ try:
     ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip()]
     DATABASE = os.getenv("DATABASE", "homefood.db")
 except:
-    # Если нет python-dotenv или .env файла, используем значения по умолчанию
-    BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"  # Получите у @BotFather
-    ADMIN_IDS = [123456789]  # Замените на ваш Telegram ID
+    BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
+    ADMIN_IDS = [123456789]
     DATABASE = "homefood.db"
+
+# === CONVERSATION STATES ===
+(NAME, DESCRIPTION, PRICE, IMAGE, COOK_NAME, COOK_PHONE, 
+ CATEGORY, INGREDIENTS, CONFIRM) = range(9)
 
 # === DATABASE ===
 @contextmanager
@@ -37,6 +42,58 @@ def get_db():
         yield conn
     finally:
         conn.close()
+
+def init_database():
+    """Инициализация базы данных"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+        
+        # Таблица продуктов
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS products (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                price REAL NOT NULL,
+                image TEXT,
+                cook_name TEXT,
+                cook_phone TEXT,
+                category TEXT,
+                ingredients TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица заказов
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS orders (
+                id TEXT PRIMARY KEY,
+                customer_telegram TEXT,
+                customer_address TEXT,
+                customer_phone TEXT,
+                total_amount REAL,
+                status TEXT DEFAULT 'pending',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+        
+        # Таблица позиций заказов
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS order_items (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                order_id TEXT,
+                product_id TEXT,
+                product_name TEXT,
+                quantity INTEGER,
+                price REAL,
+                cook_name TEXT,
+                cook_phone TEXT,
+                FOREIGN KEY (order_id) REFERENCES orders(id)
+            )
+        ''')
+        
+        conn.commit()
 
 # === HELPER FUNCTIONS ===
 def is_admin(user_id: int) -> bool:
@@ -66,7 +123,6 @@ def format_order(order: dict) -> str:
     emoji = status_emoji.get(order['status'], '❓')
     status_name = status_names.get(order['status'], order['status'])
     
-    # Парсим items
     items_text = ""
     if order.get('items_data'):
         for item_str in order['items_data'].split(','):
@@ -82,9 +138,9 @@ def format_order(order: dict) -> str:
 📋 <b>Заказ #{order['id'][:8]}</b>
 {emoji} <b>Статус:</b> {status_name}
 
-👤 <b>Клиент:</b> {order['customer_name']}
-📱 <b>Телефон:</b> {order['customer_phone']}
-📍 <b>Адрес:</b> {order['customer_address']}
+👤 <b>Telegram:</b> @{order.get('customer_telegram', 'Не указан')}
+📍 <b>Адрес:</b> {order.get('customer_address', 'Не указан')}
+📞 <b>Телефон:</b> {order.get('customer_phone', 'Не указан')}
 
 🛒 <b>Состав заказа:</b>
 {items_text}
@@ -109,6 +165,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("📦 Все заказы", callback_data="orders_all")],
         [InlineKeyboardButton("🕐 Новые заказы", callback_data="orders_pending")],
         [InlineKeyboardButton("👨‍🍳 В работе", callback_data="orders_cooking")],
+        [InlineKeyboardButton("🍽️ Управление меню", callback_data="menu_manage")],
         [InlineKeyboardButton("📊 Статистика", callback_data="stats")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -132,14 +189,17 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 /start - Главное меню
 /orders - Все заказы
 /pending - Новые заказы
+/addproduct - Добавить блюдо
+/products - Список всех блюд
 /stats - Статистика
 /help - Эта справка
 
 <b>Функции:</b>
 • Просмотр всех заказов
 • Изменение статуса заказов
+• Добавление новых блюд
+• Управление меню
 • Просмотр статистики
-• Управление заказами
 """
     await update.message.reply_text(help_text, parse_mode='HTML')
 
@@ -241,11 +301,9 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     with get_db() as conn:
         cursor = conn.cursor()
         
-        # Общее количество заказов
         cursor.execute('SELECT COUNT(*) as count FROM orders')
         total_orders = cursor.fetchone()['count']
         
-        # Заказы по статусам
         cursor.execute('''
             SELECT status, COUNT(*) as count, SUM(total_amount) as total
             FROM orders
@@ -253,22 +311,24 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ''')
         status_stats = cursor.fetchall()
         
-        # Общая сумма
         cursor.execute('SELECT SUM(total_amount) as total FROM orders')
         total_amount = cursor.fetchone()['total'] or 0
         
-        # Сегодняшние заказы
         cursor.execute('''
             SELECT COUNT(*) as count, SUM(total_amount) as total
             FROM orders
             WHERE DATE(created_at) = DATE('now')
         ''')
         today = cursor.fetchone()
+        
+        cursor.execute('SELECT COUNT(*) as count FROM products')
+        total_products = cursor.fetchone()['count']
     
     stats_text = f"""
 📊 <b>Статистика Home Food</b>
 
 📦 <b>Всего заказов:</b> {total_orders}
+🍽️ <b>Блюд в меню:</b> {total_products}
 💰 <b>Общая сумма:</b> {total_amount:.1f} AED
 
 <b>По статусам:</b>
@@ -291,6 +351,310 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(stats_text, parse_mode='HTML')
 
+# === PRODUCT MANAGEMENT ===
+async def products_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Показать все блюда"""
+    if not is_admin(update.effective_user.id):
+        return
+    
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT * FROM products ORDER BY category, name')
+        products = [dict(row) for row in cursor.fetchall()]
+    
+    if not products:
+        await update.message.reply_text("🍽️ Меню пока пустое. Используйте /addproduct для добавления блюд.")
+        return
+    
+    # Группируем по категориям
+    categories = {}
+    for p in products:
+        cat = p['category'] or 'Без категории'
+        if cat not in categories:
+            categories[cat] = []
+        categories[cat].append(p)
+    
+    text = "🍽️ <b>Все блюда в меню:</b>\n\n"
+    
+    for cat, items in categories.items():
+        text += f"<b>📂 {cat.upper()}</b>\n"
+        for p in items:
+            text += f"• {p['name']} - {p['price']} AED\n"
+        text += "\n"
+    
+    keyboard = [
+        [InlineKeyboardButton("➕ Добавить блюдо", callback_data="add_product")],
+        [InlineKeyboardButton("🗑️ Удалить блюдо", callback_data="delete_product_list")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
+
+async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Начало добавления блюда"""
+    query = update.callback_query
+    
+    if query:
+        await query.answer()
+        if not is_admin(query.from_user.id):
+            await query.edit_message_text("❌ У вас нет доступа")
+            return ConversationHandler.END
+        message = query.message
+    else:
+        if not is_admin(update.effective_user.id):
+            return ConversationHandler.END
+        message = update.message
+    
+    # Инициализируем временное хранилище
+    context.user_data['new_product'] = {}
+    
+    await message.reply_text(
+        "🍽️ <b>Добавление нового блюда</b>\n\n"
+        "Шаг 1 из 8\n"
+        "Введите <b>название блюда</b>:\n\n"
+        "Например: Домашние пельмени\n\n"
+        "Отправьте /cancel для отмены",
+        parse_mode='HTML'
+    )
+    
+    return NAME
+
+async def product_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение названия"""
+    context.user_data['new_product']['name'] = update.message.text
+    
+    await update.message.reply_text(
+        f"✅ Название: <b>{update.message.text}</b>\n\n"
+        "Шаг 2 из 8\n"
+        "Введите <b>описание блюда</b>:\n\n"
+        "Например: Сочные пельмени с говядиной и свининой, как в России",
+        parse_mode='HTML'
+    )
+    
+    return DESCRIPTION
+
+async def product_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение описания"""
+    context.user_data['new_product']['description'] = update.message.text
+    
+    await update.message.reply_text(
+        f"✅ Описание сохранено\n\n"
+        "Шаг 3 из 8\n"
+        "Введите <b>цену в AED</b> (только число):\n\n"
+        "Например: 25",
+        parse_mode='HTML'
+    )
+    
+    return PRICE
+
+async def product_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение цены"""
+    try:
+        price = float(update.message.text)
+        if price <= 0:
+            raise ValueError
+        
+        context.user_data['new_product']['price'] = price
+        
+        await update.message.reply_text(
+            f"✅ Цена: <b>{price} AED</b>\n\n"
+            "Шаг 4 из 8\n"
+            "Отправьте <b>ссылку на изображение блюда</b>:\n\n"
+            "Можно использовать ссылки с Unsplash, Imgur и т.д.\n"
+            "Например: https://images.unsplash.com/photo-1234567890",
+            parse_mode='HTML'
+        )
+        
+        return IMAGE
+        
+    except ValueError:
+        await update.message.reply_text(
+            "❌ Ошибка! Введите корректное число.\n"
+            "Например: 25 или 35.5"
+        )
+        return PRICE
+
+async def product_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение изображения"""
+    image_url = update.message.text
+    
+    # Простая валидация URL
+    if not (image_url.startswith('http://') or image_url.startswith('https://')):
+        await update.message.reply_text(
+            "❌ Пожалуйста, отправьте полную ссылку, начинающуюся с http:// или https://"
+        )
+        return IMAGE
+    
+    context.user_data['new_product']['image'] = image_url
+    
+    await update.message.reply_text(
+        f"✅ Изображение сохранено\n\n"
+        "Шаг 5 из 8\n"
+        "Введите <b>имя повара</b>:\n\n"
+        "Например: Анна Петрова",
+        parse_mode='HTML'
+    )
+    
+    return COOK_NAME
+
+async def product_cook_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение имени повара"""
+    context.user_data['new_product']['cook_name'] = update.message.text
+    
+    await update.message.reply_text(
+        f"✅ Повар: <b>{update.message.text}</b>\n\n"
+        "Шаг 6 из 8\n"
+        "Введите <b>телефон повара</b>:\n\n"
+        "Например: +971501234567",
+        parse_mode='HTML'
+    )
+    
+    return COOK_PHONE
+
+async def product_cook_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение телефона повара"""
+    context.user_data['new_product']['cook_phone'] = update.message.text
+    
+    keyboard = [
+        [InlineKeyboardButton("🍔 burger", callback_data="cat_burger")],
+        [InlineKeyboardButton("🍕 pizza", callback_data="cat_pizza")],
+        [InlineKeyboardButton("🍚 plov", callback_data="cat_plov")],
+        [InlineKeyboardButton("🍲 soup", callback_data="cat_soup")],
+        [InlineKeyboardButton("🥟 pelmeni", callback_data="cat_pelmeni")],
+        [InlineKeyboardButton("🥖 khachapuri", callback_data="cat_khachapuri")],
+        [InlineKeyboardButton("🍰 dessert", callback_data="cat_dessert")],
+        [InlineKeyboardButton("🥗 salad", callback_data="cat_salad")],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(
+        f"✅ Телефон сохранен\n\n"
+        "Шаг 7 из 8\n"
+        "Выберите <b>категорию блюда</b>:",
+        reply_markup=reply_markup,
+        parse_mode='HTML'
+    )
+    
+    return CATEGORY
+
+async def product_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение категории"""
+    query = update.callback_query
+    await query.answer()
+    
+    category = query.data.replace('cat_', '')
+    context.user_data['new_product']['category'] = category
+    
+    await query.edit_message_text(
+        f"✅ Категория: <b>{category}</b>\n\n"
+        "Шаг 8 из 8\n"
+        "Введите <b>ингредиенты</b> через запятую:\n\n"
+        "Например: Мука, Яйцо, Говядина, Свинина, Лук, Соль, Перец",
+        parse_mode='HTML'
+    )
+    
+    return INGREDIENTS
+
+async def product_ingredients(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение ингредиентов"""
+    ingredients_str = update.message.text
+    ingredients_list = [ing.strip() for ing in ingredients_str.split(',')]
+    
+    context.user_data['new_product']['ingredients'] = json.dumps(ingredients_list, ensure_ascii=False)
+    
+    # Формируем превью
+    product = context.user_data['new_product']
+    
+    preview = f"""
+📋 <b>Предпросмотр блюда:</b>
+
+🍽️ <b>Название:</b> {product['name']}
+📝 <b>Описание:</b> {product['description']}
+💰 <b>Цена:</b> {product['price']} AED
+🖼️ <b>Изображение:</b> {product['image'][:50]}...
+👨‍🍳 <b>Повар:</b> {product['cook_name']}
+📞 <b>Телефон:</b> {product['cook_phone']}
+📂 <b>Категория:</b> {product['category']}
+🥘 <b>Ингредиенты:</b> {', '.join(ingredients_list[:5])}{'...' if len(ingredients_list) > 5 else ''}
+
+Всё верно?
+"""
+    
+    keyboard = [
+        [
+            InlineKeyboardButton("✅ Да, сохранить", callback_data="save_product"),
+            InlineKeyboardButton("❌ Отменить", callback_data="cancel_product")
+        ]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    await update.message.reply_text(preview, reply_markup=reply_markup, parse_mode='HTML')
+    
+    return CONFIRM
+
+async def save_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Сохранение блюда в БД"""
+    query = update.callback_query
+    await query.answer()
+    
+    product = context.user_data.get('new_product')
+    
+    if not product:
+        await query.edit_message_text("❌ Ошибка: данные блюда не найдены")
+        return ConversationHandler.END
+    
+    # Генерируем ID
+    with get_db() as conn:
+        cursor = conn.cursor()
+        cursor.execute('SELECT MAX(CAST(id AS INTEGER)) as max_id FROM products WHERE id NOT LIKE "%-%"')
+        result = cursor.fetchone()
+        new_id = str((result['max_id'] or 0) + 1)
+        
+        # Сохраняем
+        cursor.execute('''
+            INSERT INTO products (id, name, description, price, image, cook_name, cook_phone, category, ingredients)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            new_id,
+            product['name'],
+            product['description'],
+            product['price'],
+            product['image'],
+            product['cook_name'],
+            product['cook_phone'],
+            product['category'],
+            product['ingredients']
+        ))
+        conn.commit()
+    
+    await query.edit_message_text(
+        f"✅ <b>Блюдо успешно добавлено!</b>\n\n"
+        f"ID: {new_id}\n"
+        f"Название: {product['name']}\n"
+        f"Цена: {product['price']} AED\n"
+        f"Категория: {product['category']}\n\n"
+        f"Теперь оно доступно в мини-аппе!",
+        parse_mode='HTML'
+    )
+    
+    # Очищаем данные
+    context.user_data.clear()
+    
+    return ConversationHandler.END
+
+async def cancel_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена добавления"""
+    query = update.callback_query if update.callback_query else None
+    
+    if query:
+        await query.answer()
+        await query.edit_message_text("❌ Добавление блюда отменено")
+    else:
+        await update.message.reply_text("❌ Добавление блюда отменено")
+    
+    context.user_data.clear()
+    return ConversationHandler.END
+
 # === CALLBACK HANDLERS ===
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик нажатий на кнопки"""
@@ -302,6 +666,53 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     
     data = query.data
+    
+    # Управление меню
+    if data == "menu_manage":
+        keyboard = [
+            [InlineKeyboardButton("➕ Добавить блюдо", callback_data="add_product")],
+            [InlineKeyboardButton("📋 Список блюд", callback_data="list_products")],
+            [InlineKeyboardButton("🗑️ Удалить блюдо", callback_data="delete_product_list")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "🍽️ <b>Управление меню</b>\n\nВыберите действие:",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+        return
+    
+    # Список блюд
+    if data == "list_products":
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT COUNT(*) as count FROM products')
+            count = cursor.fetchone()['count']
+        
+        await query.edit_message_text(
+            f"🍽️ В меню <b>{count}</b> блюд\n\n"
+            "Используйте /products для просмотра",
+            parse_mode='HTML'
+        )
+        return
+    
+    # Назад в главное меню
+    if data == "back_to_main":
+        keyboard = [
+            [InlineKeyboardButton("📦 Все заказы", callback_data="orders_all")],
+            [InlineKeyboardButton("🕐 Новые заказы", callback_data="orders_pending")],
+            [InlineKeyboardButton("👨‍🍳 В работе", callback_data="orders_cooking")],
+            [InlineKeyboardButton("🍽️ Управление меню", callback_data="menu_manage")],
+            [InlineKeyboardButton("📊 Статистика", callback_data="stats")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "🍽️ <b>Home Food Admin Panel</b>\n\nВыберите действие:",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+        return
     
     # Показать все заказы
     if data == "orders_all":
@@ -370,7 +781,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 [
                     InlineKeyboardButton("✅ Принять", callback_data=f"status_{order['id']}_confirmed"),
                     InlineKeyboardButton("❌ Отменить", callback_data=f"status_{order['id']}_cancelled")
-                ]
+                ],
+                [InlineKeyboardButton("📝 Подробнее", callback_data=f"order_detail_{order['id']}")]
             ]
             reply_markup = InlineKeyboardMarkup(keyboard)
             
@@ -441,11 +853,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 WHERE DATE(created_at) = DATE('now')
             ''')
             today = cursor.fetchone()
+            
+            cursor.execute('SELECT COUNT(*) as count FROM products')
+            total_products = cursor.fetchone()['count']
         
         stats_text = f"""
 📊 <b>Статистика</b>
 
 📦 Всего заказов: {total_orders}
+🍽️ Блюд в меню: {total_products}
 💰 Общая сумма: {total_amount:.1f} AED
 
 <b>По статусам:</b>
@@ -523,12 +939,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'UPDATE orders SET status = ? WHERE id = ?',
+                'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
                 (new_status, order_id)
             )
             conn.commit()
             
-            # Получаем обновленный заказ
             cursor.execute('''
                 SELECT o.*, 
                        GROUP_CONCAT(
@@ -554,6 +969,51 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=reply_markup,
             parse_mode='HTML'
         )
+    
+    # Удаление блюда - показать список
+    elif data == "delete_product_list":
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT id, name, category, price FROM products ORDER BY category, name LIMIT 20')
+            products = [dict(row) for row in cursor.fetchall()]
+        
+        if not products:
+            await query.edit_message_text("🍽️ Меню пустое, нечего удалять")
+            return
+        
+        keyboard = []
+        for p in products:
+            keyboard.append([InlineKeyboardButton(
+                f"🗑️ {p['name']} ({p['price']} AED)",
+                callback_data=f"delete_prod_{p['id']}"
+            )])
+        keyboard.append([InlineKeyboardButton("🔙 Отмена", callback_data="menu_manage")])
+        
+        reply_markup = InlineKeyboardMarkup(keyboard)
+        await query.edit_message_text(
+            "🗑️ <b>Удалить блюдо</b>\n\nВыберите блюдо для удаления:",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+    
+    # Подтверждение удаления
+    elif data.startswith("delete_prod_"):
+        product_id = data.replace("delete_prod_", "")
+        
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT name FROM products WHERE id = ?', (product_id,))
+            product = cursor.fetchone()
+            
+            if product:
+                cursor.execute('DELETE FROM products WHERE id = ?', (product_id,))
+                conn.commit()
+                await query.edit_message_text(
+                    f"✅ Блюдо <b>{product['name']}</b> удалено из меню",
+                    parse_mode='HTML'
+                )
+            else:
+                await query.edit_message_text("❌ Блюдо не найдено")
 
 def create_application():
     """Создать и настроить application без запуска"""
@@ -561,22 +1021,46 @@ def create_application():
         print("❌ ОШИБКА: Установите BOT_TOKEN!")
         return None
     
-    # Создаем приложение
     application = Application.builder().token(BOT_TOKEN).build()
     
-    # Регистрируем обработчики команд
+    # Conversation handler для добавления продукта
+    add_product_handler = ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(add_product_start, pattern="^add_product$"),
+            CommandHandler("addproduct", add_product_start)
+        ],
+        states={
+            NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_name)],
+            DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_description)],
+            PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_price)],
+            IMAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_image)],
+            COOK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_cook_name)],
+            COOK_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_cook_phone)],
+            CATEGORY: [CallbackQueryHandler(product_category, pattern="^cat_")],
+            INGREDIENTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_ingredients)],
+            CONFIRM: [
+                CallbackQueryHandler(save_product, pattern="^save_product$"),
+                CallbackQueryHandler(cancel_product, pattern="^cancel_product$")
+            ],
+        },
+        fallbacks=[
+            CommandHandler("cancel", cancel_product),
+            CallbackQueryHandler(cancel_product, pattern="^cancel_product$")
+        ],
+    )
+    
+    # Регистрируем обработчики
+    application.add_handler(add_product_handler)
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
     application.add_handler(CommandHandler("orders", orders_command))
     application.add_handler(CommandHandler("pending", pending_command))
     application.add_handler(CommandHandler("stats", stats_command))
-    
-    # Регистрируем обработчик кнопок
+    application.add_handler(CommandHandler("products", products_command))
     application.add_handler(CallbackQueryHandler(button_callback))
     
     return application
 
-# === MAIN ===
 def main():
     """Запуск бота"""
     if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
@@ -594,22 +1078,15 @@ def main():
     print(f"📊 База данных: {DATABASE}")
     print(f"👥 Админы: {ADMIN_IDS}")
     
-    # Создаем приложение
-    application = Application.builder().token(BOT_TOKEN).build()
+    # Инициализируем базу данных
+    init_database()
+    print("✅ База данных инициализирована")
     
-    # Регистрируем обработчики команд
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(CommandHandler("orders", orders_command))
-    application.add_handler(CommandHandler("pending", pending_command))
-    application.add_handler(CommandHandler("stats", stats_command))
+    application = create_application()
     
-    # Регистрируем обработчик кнопок
-    application.add_handler(CallbackQueryHandler(button_callback))
-    
-    # Запускаем бота
-    print("✅ Бот запущен!")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    if application:
+        print("✅ Бот запущен и готов к работе!")
+        application.run_polling(allowed_updates=Update.ALL_TYPES)
 
 if __name__ == "__main__":
     main()
