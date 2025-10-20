@@ -29,8 +29,8 @@ except:
     DATABASE = "homefood.db"
 
 # === CONVERSATION STATES ===
-(NAME, DESCRIPTION, PRICE, IMAGE, COOK_NAME, COOK_PHONE, 
- CATEGORY, INGREDIENTS, CONFIRM) = range(9)
+(NAME, DESCRIPTION, PRICE, IMAGE, COOK_TELEGRAM, 
+ CATEGORY, INGREDIENTS, CONFIRM) = range(8)
 
 # === DATABASE ===
 @contextmanager
@@ -56,8 +56,7 @@ def init_database():
                 description TEXT,
                 price REAL NOT NULL,
                 image TEXT,
-                cook_name TEXT,
-                cook_phone TEXT,
+                cook_telegram TEXT,
                 category TEXT,
                 ingredients TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -87,8 +86,7 @@ def init_database():
                 product_name TEXT,
                 quantity INTEGER,
                 price REAL,
-                cook_name TEXT,
-                cook_phone TEXT,
+                cook_telegram TEXT,
                 FOREIGN KEY (order_id) REFERENCES orders(id)
             )
         ''')
@@ -130,7 +128,10 @@ def format_order(order: dict) -> str:
             product_name = parts[1] if len(parts) > 1 else 'Продукт'
             quantity = parts[2] if len(parts) > 2 else '0'
             price = parts[3] if len(parts) > 3 else '0'
-            items_text += f"  • {product_name} x{quantity} = {price} AED\n"
+            cook_telegram = parts[4] if len(parts) > 4 else ''
+            
+            cook_info = f" (👨‍🍳 @{cook_telegram})" if cook_telegram else ""
+            items_text += f"  • {product_name} x{quantity} = {price} AED{cook_info}\n"
     
     created = datetime.fromisoformat(order['created_at']).strftime('%d.%m.%Y %H:%M')
     
@@ -258,7 +259,7 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    GROUP_CONCAT(
                        oi.product_id || ':' || oi.product_name || ':' || 
                        oi.quantity || ':' || oi.price || ':' || 
-                       COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
+                       COALESCE(oi.cook_telegram, '')
                    ) as items_data
             FROM orders o
             LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -489,31 +490,25 @@ async def product_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await update.message.reply_text(
         f"✅ Изображение сохранено\n\n"
-        "Шаг 5 из 8\n"
-        "Введите <b>имя повара</b>:\n\n"
-        "Например: Анна Петрова",
+        "Шаг 5 из 7\n"
+        "Введите <b>Telegram username повара</b> (без @):\n\n"
+        "Например: turlubay",
         parse_mode='HTML'
     )
     
-    return COOK_NAME
+    return COOK_TELEGRAM
 
-async def product_cook_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение имени повара"""
-    context.user_data['new_product']['cook_name'] = update.message.text
+async def product_cook_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Получение Telegram username повара"""
+    telegram_username = update.message.text.replace('@', '').strip()
     
-    await update.message.reply_text(
-        f"✅ Повар: <b>{update.message.text}</b>\n\n"
-        "Шаг 6 из 8\n"
-        "Введите <b>телефон повара</b>:\n\n"
-        "Например: +971501234567",
-        parse_mode='HTML'
-    )
+    if not telegram_username:
+        await update.message.reply_text(
+            "❌ Пожалуйста, введите корректный Telegram username"
+        )
+        return COOK_TELEGRAM
     
-    return COOK_PHONE
-
-async def product_cook_phone(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Получение телефона повара"""
-    context.user_data['new_product']['cook_phone'] = update.message.text
+    context.user_data['new_product']['cook_telegram'] = telegram_username
     
     keyboard = [
         [InlineKeyboardButton("🍔 burger", callback_data="cat_burger")],
@@ -528,8 +523,8 @@ async def product_cook_phone(update: Update, context: ContextTypes.DEFAULT_TYPE)
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        f"✅ Телефон сохранен\n\n"
-        "Шаг 7 из 8\n"
+        f"✅ Telegram: <b>@{telegram_username}</b>\n\n"
+        "Шаг 6 из 7\n"
         "Выберите <b>категорию блюда</b>:",
         reply_markup=reply_markup,
         parse_mode='HTML'
@@ -547,7 +542,7 @@ async def product_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
     
     await query.edit_message_text(
         f"✅ Категория: <b>{category}</b>\n\n"
-        "Шаг 8 из 8\n"
+        "Шаг 7 из 7\n"
         "Введите <b>ингредиенты</b> через запятую:\n\n"
         "Например: Мука, Яйцо, Говядина, Свинина, Лук, Соль, Перец",
         parse_mode='HTML'
@@ -572,8 +567,7 @@ async def product_ingredients(update: Update, context: ContextTypes.DEFAULT_TYPE
 📝 <b>Описание:</b> {product['description']}
 💰 <b>Цена:</b> {product['price']} AED
 🖼️ <b>Изображение:</b> {product['image'][:50]}...
-👨‍🍳 <b>Повар:</b> {product['cook_name']}
-📞 <b>Телефон:</b> {product['cook_phone']}
+👨‍🍳 <b>Повар:</b> @{product['cook_telegram']}
 📂 <b>Категория:</b> {product['category']}
 🥘 <b>Ингредиенты:</b> {', '.join(ingredients_list[:5])}{'...' if len(ingredients_list) > 5 else ''}
 
@@ -612,16 +606,15 @@ async def save_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         # Сохраняем
         cursor.execute('''
-            INSERT INTO products (id, name, description, price, image, cook_name, cook_phone, category, ingredients)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO products (id, name, description, price, image, cook_telegram, category, ingredients)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             new_id,
             product['name'],
             product['description'],
             product['price'],
             product['image'],
-            product['cook_name'],
-            product['cook_phone'],
+            product['cook_telegram'],
             product['category'],
             product['ingredients']
         ))
@@ -723,7 +716,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
+                           COALESCE(oi.cook_telegram, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -801,7 +794,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
+                           COALESCE(oi.cook_telegram, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -891,7 +884,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
+                           COALESCE(oi.cook_telegram, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -949,7 +942,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
+                           COALESCE(oi.cook_telegram, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -1034,8 +1027,7 @@ def create_application():
             DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_description)],
             PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_price)],
             IMAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_image)],
-            COOK_NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_cook_name)],
-            COOK_PHONE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_cook_phone)],
+            COOK_TELEGRAM: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_cook_telegram)],
             CATEGORY: [CallbackQueryHandler(product_category, pattern="^cat_")],
             INGREDIENTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_ingredients)],
             CONFIRM: [
