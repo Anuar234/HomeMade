@@ -156,7 +156,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     not_admin_keyboard = [
-        [InlineKeyboardButton("🍱 Открыть меню", url="https://homemade-production.up.railway.app/app")]
+        [InlineKeyboardButton("🍱 Открыть меню", url="https://homemade-production.up.railway.app/app")],
+        [InlineKeyboardButton("Мои заказы", callback_data="my_orders")],
+        [InlineKeyboardButton("Связаться с поддержкой", url="https://t.me/sekeww")],
     ]
     
     if not is_admin(user_id):
@@ -664,11 +666,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
 
     not_admin_keyboard = [
-            [InlineKeyboardButton("Перейти к заказу еды", url="https://homemade-production.up.railway.app/app")]
-        ]
+        [InlineKeyboardButton("🍱 Открыть меню", url="https://homemade-production.up.railway.app/app")],
+        [InlineKeyboardButton("Мои заказы", callback_data="my_orders")],
+        [InlineKeyboardButton("Связаться с поддержкой", url="https://t.me/sekeww")],
+    ]
     
     if not is_admin(query.from_user.id):
-        await query.edit_message_text("Перейти в мини-апп для заказа еды:", reply_markup=InlineKeyboardMarkup(not_admin_keyboard))
+        await query.edit_message_text(
+            "👋 Привет!\n\n"
+            "Добро пожаловать в <b>HomeMade</b> — место, где вкус и уют встречаются прямо у тебя дома 🍲\n\n"
+            "📱 Здесь ты можешь заказать домашнюю еду, приготовленную с любовью. Всё просто — выбирай, заказывай и наслаждайся 😋\n\n"
+            "Готов начать?",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(not_admin_keyboard)
+        )
         return
     
     data = query.data
@@ -835,6 +846,45 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup,
                 parse_mode='HTML'
             )
+    elif data == "my_orders":
+        user_id = query.from_user.id
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+            SELECT o.*, 
+                   GROUP_CONCAT(
+                       oi.product_id || ':' || oi.product_name || ':' || 
+                       oi.quantity || ':' || oi.price || ':' || 
+                       COALESCE(oi.cook_telegram, '')
+                   ) as items_data
+            FROM orders o
+            LEFT JOIN order_items oi ON o.id = oi.order_id
+            WHERE o.user_telegram_id = ?          -- 🔥 filter by current user
+            GROUP BY o.id
+            ORDER BY o.created_at DESC
+            LIMIT 5
+        ''', (user_id,))
+            orders = [dict(row) for row in cursor.fetchall()]
+
+        if not orders:
+            await query.edit_message_text("📭 У тебя пока нет заказов.")
+            return
+
+        await query.edit_message_text(f"📦 <b>Твои последние {len(orders)} заказов</b>", parse_mode='HTML')
+
+        for order in orders:
+            keyboard = [
+                [InlineKeyboardButton("📝 Подробнее", callback_data=f"order_detail_{order['id']}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.message.reply_text(
+                format_order(order),
+                reply_markup=reply_markup,
+                parse_mode='HTML'
+            )
+
     
     # Статистика
     elif data == "stats":
