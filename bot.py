@@ -154,12 +154,13 @@ def format_order(order: dict) -> str:
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
     user_id = update.effective_user.id
+
+    not_admin_keyboard = [
+            [InlineKeyboardButton("Перейти к заказу еды", url="https://homemade-production.up.railway.app/app")]
+        ]
     
     if not is_admin(user_id):
-        await update.message.reply_text(
-            "❌ У вас нет доступа к админ-панели.\n"
-            f"Ваш ID: {user_id}"
-        )
+        await update.edit_message_text("Перейти в мини-апп для заказа еды:", reply_markup=InlineKeyboardMarkup(not_admin_keyboard))
         return
     
     keyboard = [
