@@ -160,7 +160,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     
     if not is_admin(user_id):
-        await update.edit_message_text("Перейти в мини-апп для заказа еды:", reply_markup=InlineKeyboardMarkup(not_admin_keyboard))
+        await update.message.reply_text("Перейти в мини-апп для заказа еды:", reply_markup=InlineKeyboardMarkup(not_admin_keyboard))
         return
     
     keyboard = [
