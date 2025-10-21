@@ -156,16 +156,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
 
     not_admin_keyboard = [
-            [InlineKeyboardButton("Перейти к заказу еды", url="https://homemade-production.up.railway.app/app")]
-        ]
+        [InlineKeyboardButton("🍱 Открыть меню", url="https://homemade-production.up.railway.app/app")]
+    ]
     
     if not is_admin(user_id):
         await update.message.reply_text(
-            "🍔 Привет!\n"
-            "Добро пожаловать в наш фуд-мир 😋\n"
-            "Здесь ты можешь заказать любимые блюда быстро, удобно и вкусно.\n"
-            "Готов выбрать что-нибудь вкусненькое?\n", 
-            reply_markup=InlineKeyboardMarkup(not_admin_keyboard))
+            "👋 Привет!\n\n"
+            "Добро пожаловать в <b>HomeMade</b> — место, где вкус и уют встречаются прямо у тебя дома 🍲\n\n"
+            "📱 Здесь ты можешь заказать домашнюю еду, приготовленную с любовью. Всё просто — выбирай, заказывай и наслаждайся 😋\n\n"
+            "Готов начать?",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(not_admin_keyboard)
+        )
         return
     
     keyboard = [
@@ -178,12 +180,13 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     reply_markup = InlineKeyboardMarkup(keyboard)
     
     await update.message.reply_text(
-        "🍽️ <b>Home Food Admin Panel</b>\n\n"
-        "Добро пожаловать в панель управления!\n"
+        "🍽️ <b>HomeMade Admin Panel</b>\n\n"
+        "Добро пожаловать, шеф 👨‍🍳\n"
         "Выберите действие:",
         reply_markup=reply_markup,
         parse_mode='HTML'
     )
+
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /help"""
