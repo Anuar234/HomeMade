@@ -653,9 +653,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик нажатий на кнопки"""
     query = update.callback_query
     await query.answer()
+
+    not_admin_keyboard = [
+            [InlineKeyboardButton("Перейти к заказу еды", url="https://homemade-production.up.railway.app/app")]
+        ]
     
     if not is_admin(query.from_user.id):
-        await query.edit_message_text("❌ У вас нет доступа")
+        await query.edit_message_text("Перейти в мини-апп для заказа еды:", reply_markup=InlineKeyboardMarkup(not_admin_keyboard))
         return
     
     data = query.data
@@ -668,6 +672,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("🗑️ Удалить блюдо", callback_data="delete_product_list")],
             [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
         ]
+
         reply_markup = InlineKeyboardMarkup(keyboard)
         await query.edit_message_text(
             "🍽️ <b>Управление меню</b>\n\nВыберите действие:",
