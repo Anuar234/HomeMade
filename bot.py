@@ -160,7 +160,12 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
     
     if not is_admin(user_id):
-        await update.message.reply_text("Перейти в мини-апп для заказа еды:", reply_markup=InlineKeyboardMarkup(not_admin_keyboard))
+        await update.message.reply_text(
+            "🍔 Привет!\n"
+            "Добро пожаловать в наш фуд-мир 😋\n"
+            "Здесь ты можешь заказать любимые блюда быстро, удобно и вкусно.\n"
+            "Готов выбрать что-нибудь вкусненькое?\n", 
+            reply_markup=InlineKeyboardMarkup(not_admin_keyboard))
         return
     
     keyboard = [
