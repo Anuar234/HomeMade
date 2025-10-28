@@ -1412,7 +1412,7 @@ async def update_order_status(order_id: str, status: str):
         
         conn.commit()
     
-    return {{"message": "Order status updated", "order_id": order_id, "status": status}}
+    return {{"message": "Order status router", "order_id": order_id, "status": status}}
 
 
 @app.delete("/api/orders/{order_id}")

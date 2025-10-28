@@ -73,7 +73,7 @@ def init_database():
                 total_amount REAL,
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                router_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
         
@@ -996,7 +996,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with get_db() as conn:
             cursor = conn.cursor()
             cursor.execute(
-                'UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?',
+                'UPDATE orders SET status = ?, router_at = CURRENT_TIMESTAMP WHERE id = ?',
                 (new_status, order_id)
             )
             conn.commit()
