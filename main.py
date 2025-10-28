@@ -833,12 +833,20 @@ async def get_app_category(category: str):
             }}
             
             .success-message {{
-                background: #4CAF50;
+                background: linear-gradient(135deg, #4CAF50, #45a049);
                 color: white;
-                padding: 15px;
-                border-radius: 10px;
+                padding: 20px;
+                border-radius: 15px;
                 margin-bottom: 20px;
                 text-align: center;
+                font-size: 16px;
+                line-height: 1.6;
+                box-shadow: 0 4px 15px rgba(76,175,80,0.3);
+            }}
+            
+            .success-icon {{
+                font-size: 48px;
+                margin-bottom: 10px;
             }}
             
             .error-message {{
@@ -848,6 +856,25 @@ async def get_app_category(category: str):
                 border-radius: 10px;
                 margin-bottom: 20px;
                 text-align: center;
+            }}
+            
+            .close-success-btn {{
+                width: 100%;
+                background: white;
+                color: #4CAF50;
+                border: 2px solid white;
+                border-radius: 12px;
+                padding: 12px;
+                font-size: 16px;
+                font-weight: bold;
+                cursor: pointer;
+                margin-top: 15px;
+                transition: all 0.3s ease;
+            }}
+            
+            .close-success-btn:hover {{
+                background: rgba(255,255,255,0.9);
+                transform: translateY(-1px);
             }}
             
             @media (max-width: 480px) {{
@@ -963,14 +990,27 @@ async def get_app_category(category: str):
                     </div>
                     
                     <div v-if="orderSuccess" class="success-message">
-                        ✅ Заказ #{{{{ orderSuccess }}}} успешно создан!
+                        <div class="success-icon">✅</div>
+                        <div style="font-size: 20px; font-weight: bold; margin-bottom: 10px;">
+                            Заказ успешно создан!
+                        </div>
+                        <div style="margin-bottom: 10px;">
+                            Номер заказа: <strong>#{{{{ orderSuccess }}}}</strong>
+                        </div>
+                        <div style="font-size: 14px; opacity: 0.9;">
+                            Вы получите уведомление о статусе заказа в Telegram боте.<br>
+                            Повара свяжутся с вами в ближайшее время!
+                        </div>
+                        <button class="close-success-btn" @click="closeSuccessAndReset">
+                            🏠 Вернуться к меню
+                        </button>
                     </div>
                     
                     <div v-if="orderError" class="error-message">
                         ❌ {{{{ orderError }}}}
                     </div>
                     
-                    <form @submit.prevent="submitOrder">
+                    <form v-if="!orderSuccess" @submit.prevent="submitOrder">
                         <div class="form-group">
                             <label class="form-label">👤 Ваше имя *</label>
                             <input 
@@ -1103,10 +1143,20 @@ async def get_app_category(category: str):
                 }};
 
                 const cancelCheckout = () => {{
-                    showCheckoutForm.value = false;
+                    if (!orderSuccess.value) {{
+                        showCheckoutForm.value = false;
+                        customerInfo.value = {{ name: '', phone: '', address: '' }};
+                        orderSuccess.value = null;
+                        orderError.value = null;
+                    }}
+                }};
+
+                const closeSuccessAndReset = () => {{
+                    cart.value = [];
                     customerInfo.value = {{ name: '', phone: '', address: '' }};
+                    showCheckoutForm.value = false;
                     orderSuccess.value = null;
-                    orderError.value = null;
+                    window.location.href = '/app';
                 }};
 
                 const submitOrder = async () => {{
@@ -1150,38 +1200,7 @@ async def get_app_category(category: str):
                         // Показываем успешное сообщение
                         orderSuccess.value = savedOrder.id;
                         
-                        // Отправляем уведомления в WhatsApp каждому повару
-                        const ordersByCook = {{}};
-                        cart.value.forEach(item => {{
-                            if (!ordersByCook[item.cook_phone]) {{
-                                ordersByCook[item.cook_phone] = {{
-                                    cook_name: item.cook_name,
-                                    cook_phone: item.cook_phone,
-                                    items: []
-                                }};
-                            }}
-                            ordersByCook[item.cook_phone].items.push(item);
-                        }});
-
-                        Object.values(ordersByCook).forEach(order => {{
-                            const orderText = order.items.map(item => 
-                                `${{item.name}} x${{item.quantity}} = ${{(item.price * item.quantity).toFixed(1)}} AED`
-                            ).join('\\n');
-                            
-                            const total = order.items.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-                            const message = `🛒 НОВЫЙ ЗАКАЗ #${{savedOrder.id}}\\n\\n👤 ${{customerInfo.value.name}}\\n📱 ${{customerInfo.value.phone}}\\n📍 ${{customerInfo.value.address}}\\n\\n${{orderText}}\\n\\n💰 Итого: ${{total.toFixed(1)}} AED\\n\\nПожалуйста, подтвердите заказ!`;
-                            const whatsappUrl = `https://wa.me/${{order.cook_phone.replace(/[^0-9]/g, '')}}?text=${{encodeURIComponent(message)}}`;
-                            window.open(whatsappUrl, '_blank');
-                        }});
-                        
-                        // Очищаем корзину через 2 секунды
-                        setTimeout(() => {{
-                            cart.value = [];
-                            customerInfo.value = {{ name: '', phone: '', address: '' }};
-                            showCheckoutForm.value = false;
-                            orderSuccess.value = null;
-                            alert(`✅ Заказ #${{savedOrder.id}} успешно создан!\\n\\nПовара получили уведомление и свяжутся с вами в WhatsApp.\\n\\nВы также получите уведомление о статусе заказа в Telegram боте!`);
-                        }}, 2000);
+                        console.log('Заказ успешно создан:', savedOrder.id);
                         
                     }} catch (error) {{
                         console.error('Ошибка:', error);
@@ -1251,6 +1270,7 @@ async def get_app_category(category: str):
                     proceedToCheckout,
                     backToCart,
                     cancelCheckout,
+                    closeSuccessAndReset,
                     submitOrder,
                     goBack
                 }};
@@ -1260,231 +1280,3 @@ async def get_app_category(category: str):
     </body>
     </html>
     """)
-
-
-@app.get("/api/products", response_model=List[Product])
-async def get_products(category: Optional[str] = None):
-    """Получить все продукты или по категории из БД"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        
-        if category:
-            cursor.execute(
-                'SELECT * FROM products WHERE LOWER(category) = LOWER(?)',
-                (category,)
-            )
-        else:
-            cursor.execute('SELECT * FROM products')
-        
-        rows = cursor.fetchall()
-        
-        products = []
-        for row in rows:
-            product = dict(row)
-            # Парсим JSON ingredients
-            if product['ingredients']:
-                product['ingredients'] = json.loads(product['ingredients'])
-            else:
-                product['ingredients'] = []
-            products.append(product)
-        
-        return products
-
-
-@app.get("/api/products/{product_id}", response_model=Product)
-async def get_product(product_id: str):
-    """Получить конкретный продукт из БД"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT * FROM products WHERE id = ?', (product_id,))
-        row = cursor.fetchone()
-        
-        if not row:
-            raise HTTPException(status_code=404, detail="Product not found")
-        
-        product = dict(row)
-        if product['ingredients']:
-            product['ingredients'] = json.loads(product['ingredients'])
-        else:
-            product['ingredients'] = []
-        
-        return product
-
-
-@app.post("/api/orders", response_model=Order)
-async def create_order(order: Order):
-    """Создать новый заказ в БД"""
-    order_id = str(uuid.uuid4())
-    created_at = datetime.now()
-    
-    # Вычисляем общую сумму
-    total = 0
-    with get_db() as conn:
-        cursor = conn.cursor()
-        
-        for item in order.items:
-            cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
-            row = cursor.fetchone()
-            if row:
-                total += row['price'] * item.quantity
-        
-        # Сохраняем заказ с user_telegram_id
-        cursor.execute('''
-            INSERT INTO orders (id, user_telegram_id, customer_name, customer_phone, customer_address, total_amount, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            order_id,
-            order.user_telegram_id,
-            order.customer_name,
-            order.customer_phone,
-            order.customer_address,
-            total,
-            order.status,
-            created_at.isoformat()
-        ))
-        
-        # Сохраняем элементы заказа с информацией о продукте и поваре
-        for item in order.items:
-            cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
-            row = cursor.fetchone()
-            if row:
-                cursor.execute('''
-                    INSERT INTO order_items (order_id, product_id, product_name, quantity, price, cook_name, cook_phone)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                ''', (
-                    order_id,
-                    item.product_id,
-                    row['name'],
-                    item.quantity,
-                    row['price'],
-                    row['cook_name'],
-                    row['cook_phone']
-                ))
-        
-        conn.commit()
-    
-    order.id = order_id
-    order.total_amount = total
-    order.created_at = created_at.isoformat()
-    
-    return order
-
-
-@app.get("/api/orders")
-async def get_orders():
-    """Получить все заказы из БД"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        
-        cursor.execute('''
-            SELECT o.*, 
-                   GROUP_CONCAT(
-                       oi.product_id || ':' || oi.product_name || ':' || 
-                       oi.quantity || ':' || oi.price || ':' || 
-                       oi.cook_name || ':' || oi.cook_phone
-                   ) as items_data
-            FROM orders o
-            LEFT JOIN order_items oi ON o.id = oi.order_id
-            GROUP BY o.id
-            ORDER BY o.created_at DESC
-        ''')
-        
-        rows = cursor.fetchall()
-        
-        orders = []
-        for row in rows:
-            order = dict(row)
-            
-            # Парсим items
-            items = []
-            if order['items_data']:
-                for item_str in order['items_data'].split(','):
-                    parts = item_str.split(':')
-                    items.append({
-                        'product_id': parts[0],
-                        'product_name': parts[1],
-                        'quantity': int(parts[2]),
-                        'price': float(parts[3]),
-                        'cook_name': parts[4] if len(parts) > 4 else '',
-                        'cook_phone': parts[5] if len(parts) > 5 else ''
-                    })
-            
-            order['items'] = items
-            del order['items_data']
-            
-            orders.append(order)
-        
-        return orders
-
-
-@app.get("/api/orders/{order_id}")
-async def get_order(order_id: str):
-    """Получить конкретный заказ из БД"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        
-        cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
-        order_row = cursor.fetchone()
-        
-        if not order_row:
-            raise HTTPException(status_code=404, detail="Order not found")
-        
-        order = dict(order_row)
-        
-        # Получаем items
-        cursor.execute('''
-            SELECT oi.*, p.name as product_name
-            FROM order_items oi
-            LEFT JOIN products p ON oi.product_id = p.id
-            WHERE oi.order_id = ?
-        ''', (order_id,))
-        
-        items = [dict(row) for row in cursor.fetchall()]
-        order['items'] = items
-        
-        return order
-
-
-@app.put("/api/orders/{order_id}/status")
-async def update_order_status(order_id: str, status: str):
-    """Обновить статус заказа"""
-    valid_statuses = ['pending', 'confirmed', 'cooking', 'ready', 'delivered', 'cancelled']
-    
-    if status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
-    
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('UPDATE orders SET status = ? WHERE id = ?', (status, order_id))
-        
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Order not found")
-        
-        conn.commit()
-    
-    return {"message": "Order status updated", "order_id": order_id, "status": status}
-
-
-@app.delete("/api/orders/{order_id}")
-async def delete_order(order_id: str):
-    """Удалить заказ из БД"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        
-        # Удаляем items заказа
-        cursor.execute('DELETE FROM order_items WHERE order_id = ?', (order_id,))
-        
-        # Удаляем сам заказ
-        cursor.execute('DELETE FROM orders WHERE id = ?', (order_id,))
-        
-        if cursor.rowcount == 0:
-            raise HTTPException(status_code=404, detail="Order not found")
-        
-        conn.commit()
-    
-    return {"message": "Order deleted", "order_id": order_id}
-
-
-if __name__ == "__main__":
-    import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000)
