@@ -57,11 +57,10 @@ def init_db():
             )
         ''')
         
-        # Таблица заказов с user_telegram_id
+        # Таблица заказов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS orders (
                 id TEXT PRIMARY KEY,
-                user_telegram_id INTEGER,
                 customer_name TEXT NOT NULL,
                 customer_phone TEXT NOT NULL,
                 customer_address TEXT,
@@ -82,17 +81,10 @@ def init_db():
                 price REAL NOT NULL,
                 cook_name TEXT,
                 cook_phone TEXT,
-                FOREIGN KEY (order_id) REFERENCES orders(id),
-                FOREIGN KEY (product_id) REFERENCES products(id)
+                FOREIGN KEY (order_id) REFERENCES orders (id),
+                FOREIGN KEY (product_id) REFERENCES products (id)
             )
         ''')
-        
-        # Проверяем наличие колонки user_telegram_id (для миграции старых БД)
-        cursor.execute("PRAGMA table_info(orders)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if 'user_telegram_id' not in columns:
-            print("🔄 Migrating database: adding user_telegram_id column...")
-            cursor.execute('ALTER TABLE orders ADD COLUMN user_telegram_id INTEGER')
         
         conn.commit()
         
@@ -211,7 +203,6 @@ class OrderItem(BaseModel):
 
 class Order(BaseModel):
     id: Optional[str] = None
-    user_telegram_id: Optional[int] = None
     customer_name: str
     customer_phone: str
     customer_address: str
@@ -257,7 +248,6 @@ async def get_app():
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Home Food Abu Dhabi</title>
         <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
         <style>
     body {
@@ -394,13 +384,10 @@ async def get_app():
         </div>
 
         <script>
-        const { createApp, ref, onMounted } = Vue;
-        
+        const { createApp, ref } = Vue;
         createApp({
             setup() {
                 const searchQuery = ref('');
-                const telegramUserId = ref(null);
-                
                 const categories = ref([
                     { name: "burger", label: "Бургеры", icon: "/static/stickers_animations/burger.json" },
                     { name: "pizza", label: "Пицца", icon: "/static/stickers_animations/pizza.json" },
@@ -410,21 +397,8 @@ async def get_app():
                     { name: "khachapuri", label: "Хачапури", icon: "/static/stickers_animations/donut.json" },
                 ]);
 
-                onMounted(() => {
-                    // Получаем Telegram User ID
-                    if (window.Telegram && window.Telegram.WebApp) {
-                        const tg = window.Telegram.WebApp;
-                        tg.ready();
-                        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {
-                            telegramUserId.value = tg.initDataUnsafe.user.id;
-                            console.log('Telegram User ID:', telegramUserId.value);
-                        }
-                    }
-                });
-
                 const goToCategory = (cat) => {
-                    const userId = telegramUserId.value || '';
-                    window.location.href = `/app/${cat.name}?q=${encodeURIComponent(searchQuery.value)}&tg_user_id=${userId}`;
+                    window.location.href = `/app/${cat.name}?q=${encodeURIComponent(searchQuery.value)}`;
                 };
 
                 return { searchQuery, categories, goToCategory };
@@ -458,7 +432,6 @@ async def get_app_category(category: str):
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{category_display} - Home Food Abu Dhabi</title>
         <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <style>
             body {{ 
                 font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
@@ -1039,7 +1012,6 @@ async def get_app_category(category: str):
                 const orderSuccess = ref(null);
                 const orderError = ref(null);
                 const categoryName = ref('{category_display}');
-                const telegramUserId = ref(null);
                 
                 const customerInfo = ref({{
                     name: '',
@@ -1118,7 +1090,6 @@ async def get_app_category(category: str):
                     try {{
                         // Подготавливаем данные заказа
                         const orderData = {{
-                            user_telegram_id: telegramUserId.value,
                             customer_name: customerInfo.value.name,
                             customer_phone: customerInfo.value.phone,
                             customer_address: customerInfo.value.address,
@@ -1129,8 +1100,6 @@ async def get_app_category(category: str):
                             total_amount: cartTotal.value,
                             status: "pending"
                         }};
-                        
-                        console.log('Sending order:', orderData);
                         
                         // Отправляем заказ в API
                         const response = await fetch('/api/orders', {{
@@ -1180,7 +1149,7 @@ async def get_app_category(category: str):
                             customerInfo.value = {{ name: '', phone: '', address: '' }};
                             showCheckoutForm.value = false;
                             orderSuccess.value = null;
-                            alert(`✅ Заказ #${{savedOrder.id}} успешно создан!\\n\\nПовара получили уведомление и свяжутся с вами в WhatsApp.\\n\\nВы также получите уведомление о статусе заказа в Telegram боте!`);
+                            alert(`✅ Заказ #${{savedOrder.id}} успешно создан!\\n\\nПовара получили уведомление и свяжутся с вами в WhatsApp.`);
                         }}, 2000);
                         
                     }} catch (error) {{
@@ -1209,25 +1178,7 @@ async def get_app_category(category: str):
                     }}
                 }};
 
-                onMounted(() => {{
-                    load();
-                    
-                    // Получаем Telegram User ID из URL параметров или Telegram WebApp
-                    const urlParams = new URLSearchParams(window.location.search);
-                    const userIdFromUrl = urlParams.get('tg_user_id');
-                    
-                    if (userIdFromUrl) {{
-                        telegramUserId.value = parseInt(userIdFromUrl);
-                    }} else if (window.Telegram && window.Telegram.WebApp) {{
-                        const tg = window.Telegram.WebApp;
-                        tg.ready();
-                        if (tg.initDataUnsafe && tg.initDataUnsafe.user) {{
-                            telegramUserId.value = tg.initDataUnsafe.user.id;
-                        }}
-                    }}
-                    
-                    console.log('Telegram User ID:', telegramUserId.value);
-                }});
+                onMounted(load);
 
                 return {{ 
                     products, 
@@ -1328,13 +1279,12 @@ async def create_order(order: Order):
             if row:
                 total += row['price'] * item.quantity
         
-        # Сохраняем заказ с user_telegram_id
+        # Сохраняем заказ
         cursor.execute('''
-            INSERT INTO orders (id, user_telegram_id, customer_name, customer_phone, customer_address, total_amount, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO orders (id, customer_name, customer_phone, customer_address, total_amount, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
         ''', (
             order_id,
-            order.user_telegram_id,
             order.customer_name,
             order.customer_phone,
             order.customer_address,
@@ -1400,14 +1350,14 @@ async def get_orders():
             if order['items_data']:
                 for item_str in order['items_data'].split(','):
                     parts = item_str.split(':')
-                    items.append({
+                    items.append({{
                         'product_id': parts[0],
                         'product_name': parts[1],
                         'quantity': int(parts[2]),
                         'price': float(parts[3]),
                         'cook_name': parts[4] if len(parts) > 4 else '',
                         'cook_phone': parts[5] if len(parts) > 5 else ''
-                    })
+                    }})
             
             order['items'] = items
             del order['items_data']
@@ -1451,7 +1401,7 @@ async def update_order_status(order_id: str, status: str):
     valid_statuses = ['pending', 'confirmed', 'cooking', 'ready', 'delivered', 'cancelled']
     
     if status not in valid_statuses:
-        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {{valid_statuses}}")
     
     with get_db() as conn:
         cursor = conn.cursor()
@@ -1462,7 +1412,7 @@ async def update_order_status(order_id: str, status: str):
         
         conn.commit()
     
-    return {"message": "Order status updated", "order_id": order_id, "status": status}
+    return {{"message": "Order status updated", "order_id": order_id, "status": status}}
 
 
 @app.delete("/api/orders/{order_id}")
@@ -1482,7 +1432,7 @@ async def delete_order(order_id: str):
         
         conn.commit()
     
-    return {"message": "Order deleted", "order_id": order_id}
+    return {{"message": "Order deleted", "order_id": order_id}}
 
 
 if __name__ == "__main__":
