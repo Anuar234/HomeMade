@@ -50,18 +50,17 @@ def init_database():
         
         # Таблица продуктов
         cursor.execute('''
-            CREATE TABLE IF NOT EXISTS products (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT,
-                price REAL NOT NULL,
-                image TEXT,
-                cook_telegram TEXT,
-                category TEXT,
-                ingredients TEXT,
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
+        CREATE TABLE IF NOT EXISTS orders (
+            id TEXT PRIMARY KEY,
+            customer_telegram TEXT,
+            customer_address TEXT,
+            customer_phone TEXT,
+            total_amount REAL,
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )
+''')
+
         
         # Таблица заказов
         cursor.execute('''
