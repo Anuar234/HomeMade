@@ -47,21 +47,7 @@ def init_database():
     """Инициализация базы данных"""
     with get_db() as conn:
         cursor = conn.cursor()
-        
-        # Таблица продуктов
-        cursor.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            id TEXT PRIMARY KEY,
-            customer_telegram TEXT,
-            customer_address TEXT,
-            customer_phone TEXT,
-            total_amount REAL,
-            status TEXT DEFAULT 'pending',
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-    )
-''')
 
-        
         # Таблица заказов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS orders (
@@ -71,10 +57,10 @@ def init_database():
                 customer_phone TEXT,
                 total_amount REAL,
                 status TEXT DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-        
+
         # Таблица позиций заказов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS order_items (
@@ -88,7 +74,21 @@ def init_database():
                 FOREIGN KEY (order_id) REFERENCES orders(id)
             )
         ''')
-        
+
+        # Таблица блюд
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS products (
+                id TEXT PRIMARY KEY,
+                name TEXT,
+                description TEXT,
+                price REAL,
+                image TEXT,
+                cook_telegram TEXT,
+                category TEXT,
+                ingredients TEXT
+            )
+        ''')
+
         conn.commit()
 
 # === HELPER FUNCTIONS ===
