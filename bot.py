@@ -270,7 +270,7 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    GROUP_CONCAT(
                        oi.product_id || ':' || oi.product_name || ':' || 
                        oi.quantity || ':' || oi.price || ':' || 
-                       COALESCE(oi.cook_telegram, '')
+                       COALESCE(router, '')
                    ) as items_data
             FROM orders o
             LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -741,7 +741,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_telegram, '')
+                           COALESCE(router, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -819,7 +819,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_telegram, '')
+                           COALESCE(router, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -856,7 +856,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    GROUP_CONCAT(
                        oi.product_id || ':' || oi.product_name || ':' || 
                        oi.quantity || ':' || oi.price || ':' || 
-                       COALESCE(oi.cook_telegram, '')
+                       COALESCE(router, '')
                    ) as items_data
             FROM orders o
             LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -948,7 +948,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_telegram, '')
+                           COALESCE(router, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -1006,7 +1006,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_telegram, '')
+                           COALESCE(router, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
