@@ -941,7 +941,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 SELECT o.*, 
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
-                           oi.quantity || ':' || oi.price || ':' || 
+                           oi.quantity || ':' || oi.price || ':' 
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -998,8 +998,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 SELECT o.*, 
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
-                           oi.quantity || ':' || oi.price || ':' || 
-                           
+                           oi.quantity || ':' || oi.price || ':'
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
