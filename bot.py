@@ -63,11 +63,10 @@ def init_database():
             )
         ''')
         
-        # Таблица заказов с user_telegram_id
+        # Таблица заказов
         cursor.execute('''
             CREATE TABLE IF NOT EXISTS orders (
                 id TEXT PRIMARY KEY,
-                user_telegram_id INTEGER,
                 customer_telegram TEXT,
                 customer_address TEXT,
                 customer_phone TEXT,
@@ -92,13 +91,6 @@ def init_database():
             )
         ''')
         
-        # Проверяем, есть ли колонка user_telegram_id (для миграции старых БД)
-        cursor.execute("PRAGMA table_info(orders)")
-        columns = [column[1] for column in cursor.fetchall()]
-        if 'user_telegram_id' not in columns:
-            print("🔄 Migrating database: adding user_telegram_id column...")
-            cursor.execute('ALTER TABLE orders ADD COLUMN user_telegram_id INTEGER')
-        
         conn.commit()
 
 # === HELPER FUNCTIONS ===
@@ -118,10 +110,10 @@ def format_order(order: dict) -> str:
     }
     
     status_names = {
-        'pending': 'Ожидает подтверждения',
+        'pending': 'Ожидает',
         'confirmed': 'Подтвержден',
         'cooking': 'Готовится',
-        'ready': 'Готов к получению',
+        'ready': 'Готов',
         'delivered': 'Доставлен',
         'cancelled': 'Отменен'
     }
@@ -143,16 +135,12 @@ def format_order(order: dict) -> str:
     
     created = datetime.fromisoformat(order['created_at']).strftime('%d.%m.%Y %H:%M')
     
-    # Добавляем информацию о пользователе для админов
-    user_info = ""
-    if order.get('customer_telegram'):
-        user_info = f"👤 <b>Telegram:</b> @{order['customer_telegram']}\n"
-    
     return f"""
 📋 <b>Заказ #{order['id'][:8]}</b>
 {emoji} <b>Статус:</b> {status_name}
 
-{user_info}📍 <b>Адрес:</b> {order.get('customer_address', 'Не указан')}
+👤 <b>Telegram:</b> @{order.get('customer_telegram', 'Не указан')}
+📍 <b>Адрес:</b> {order.get('customer_address', 'Не указан')}
 📞 <b>Телефон:</b> {order.get('customer_phone', 'Не указан')}
 
 🛒 <b>Состав заказа:</b>
@@ -162,59 +150,6 @@ def format_order(order: dict) -> str:
 🕐 <b>Создан:</b> {created}
 """
 
-async def notify_user_status_change(application, order_id: str, new_status: str):
-    """Отправить уведомление пользователю об изменении статуса заказа"""
-    try:
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT o.*, 
-                       GROUP_CONCAT(
-                           oi.product_id || ':' || oi.product_name || ':' || 
-                           oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_telegram, '')
-                       ) as items_data
-                FROM orders o
-                LEFT JOIN order_items oi ON o.id = oi.order_id
-                WHERE o.id = ?
-                GROUP BY o.id
-            ''', (order_id,))
-            order = cursor.fetchone()
-            
-            if not order or not order['user_telegram_id']:
-                return
-            
-            order = dict(order)
-            user_id = order['user_telegram_id']
-            
-            # Формируем сообщение для пользователя
-            status_messages = {
-                'confirmed': '✅ Ваш заказ подтвержден и принят в работу!',
-                'cooking': '👨‍🍳 Ваш заказ готовится!',
-                'ready': '🎉 Ваш заказ готов! Можете забирать.',
-                'delivered': '📦 Заказ доставлен. Приятного аппетита!',
-                'cancelled': '❌ К сожалению, ваш заказ отменен. Свяжитесь с поддержкой для уточнения.'
-            }
-            
-            status_message = status_messages.get(new_status, f'Статус заказа изменен на: {new_status}')
-            
-            message = f"""
-🔔 <b>Обновление заказа</b>
-
-{status_message}
-
-{format_order(order)}
-"""
-            
-            await application.bot.send_message(
-                chat_id=user_id,
-                text=message,
-                parse_mode='HTML'
-            )
-            
-    except Exception as e:
-        print(f"Error sending notification to user: {e}")
-
 # === COMMAND HANDLERS ===
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик команды /start"""
@@ -222,8 +157,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     not_admin_keyboard = [
         [InlineKeyboardButton("🍱 Открыть меню", url="https://homemade-production.up.railway.app/app")],
-        [InlineKeyboardButton("📦 Мои заказы", callback_data="my_orders")],
-        [InlineKeyboardButton("💬 Связаться с поддержкой", url="https://t.me/sekeww")],
+        [InlineKeyboardButton("Мои заказы", callback_data="my_orders")],
+        [InlineKeyboardButton("Связаться с поддержкой", url="https://t.me/sekeww")],
     ]
     
     if not is_admin(user_id):
@@ -292,7 +227,7 @@ async def orders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
                    GROUP_CONCAT(
                        oi.product_id || ':' || oi.product_name || ':' || 
                        oi.quantity || ':' || oi.price || ':' || 
-                       COALESCE(oi.cook_telegram, '')
+                       COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
                    ) as items_data
             FROM orders o
             LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -730,62 +665,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
 
-    user_id = query.from_user.id
-    data = query.data
-
-    # Обработка "Мои заказы" для обычных пользователей
-    if data == "my_orders":
-        with get_db() as conn:
-            cursor = conn.cursor()
-            cursor.execute('''
-                SELECT o.*, 
-                       GROUP_CONCAT(
-                           oi.product_id || ':' || oi.product_name || ':' || 
-                           oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_telegram, '')
-                       ) as items_data
-                FROM orders o
-                LEFT JOIN order_items oi ON o.id = oi.order_id
-                WHERE o.user_telegram_id = ?
-                GROUP BY o.id
-                ORDER BY o.created_at DESC
-                LIMIT 10
-            ''', (user_id,))
-            orders = [dict(row) for row in cursor.fetchall()]
-
-        if not orders:
-            await query.edit_message_text(
-                "📭 <b>У тебя пока нет заказов</b>\n\n"
-                "Открой меню и сделай свой первый заказ! 🍽️",
-                parse_mode='HTML'
-            )
-            return
-
-        await query.edit_message_text(
-            f"📦 <b>Твои последние заказы ({len(orders)})</b>",
-            parse_mode='HTML'
-        )
-
-        for order in orders:
-            keyboard = [
-                [InlineKeyboardButton("📝 Подробнее", callback_data=f"order_detail_{order['id']}")]
-            ]
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            await query.message.reply_text(
-                format_order(order),
-                reply_markup=reply_markup,
-                parse_mode='HTML'
-            )
-        return
-
-    # Только для админов
-    if not is_admin(user_id):
-        not_admin_keyboard = [
-            [InlineKeyboardButton("🍱 Открыть меню", url="https://homemade-production.up.railway.app/app")],
-            [InlineKeyboardButton("📦 Мои заказы", callback_data="my_orders")],
-            [InlineKeyboardButton("💬 Связаться с поддержкой", url="https://t.me/sekeww")],
-        ]
+    not_admin_keyboard = [
+        [InlineKeyboardButton("🍱 Открыть меню", url="https://homemade-production.up.railway.app/app")],
+        [InlineKeyboardButton("Мои заказы", callback_data="my_orders")],
+        [InlineKeyboardButton("Связаться с поддержкой", url="https://t.me/sekeww")],
+    ]
+    
+    if not is_admin(query.from_user.id):
         await query.edit_message_text(
             "👋 Привет!\n\n"
             "Добро пожаловать в <b>HomeMade</b> — место, где вкус и уют встречаются прямо у тебя дома 🍲\n\n"
@@ -795,6 +681,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=InlineKeyboardMarkup(not_admin_keyboard)
         )
         return
+    
+    data = query.data
     
     # Управление меню
     if data == "menu_manage":
@@ -890,7 +778,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' || 
                            oi.quantity || ':' || oi.price || ':' || 
-                           COALESCE(oi.cook_telegram, '')
+                           COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -958,6 +846,45 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 reply_markup=reply_markup,
                 parse_mode='HTML'
             )
+    elif data == "my_orders":
+        user_id = query.from_user.id
+
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('''
+            SELECT o.*, 
+                   GROUP_CONCAT(
+                       oi.product_id || ':' || oi.product_name || ':' || 
+                       oi.quantity || ':' || oi.price || ':' || 
+                       COALESCE(oi.cook_telegram, '')
+                   ) as items_data
+            FROM orders o
+            LEFT JOIN order_items oi ON o.id = oi.order_id
+            WHERE o.user_telegram_id = ?          -- 🔥 filter by current user
+            GROUP BY o.id
+            ORDER BY o.created_at DESC
+            LIMIT 5
+        ''', (user_id,))
+            orders = [dict(row) for row in cursor.fetchall()]
+
+        if not orders:
+            await query.edit_message_text("📭 У тебя пока нет заказов.")
+            return
+
+        await query.edit_message_text(f"📦 <b>Твои последние {len(orders)} заказов</b>", parse_mode='HTML')
+
+        for order in orders:
+            keyboard = [
+                [InlineKeyboardButton("📝 Подробнее", callback_data=f"order_detail_{order['id']}")]
+            ]
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            await query.message.reply_text(
+                format_order(order),
+                reply_markup=reply_markup,
+                parse_mode='HTML'
+            )
+
     
     # Статистика
     elif data == "stats":
@@ -1036,29 +963,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         
         order = dict(order)
         
-        # Разные кнопки для админов и пользователей
-        if is_admin(user_id):
-            keyboard = [
-                [
-                    InlineKeyboardButton("✅ Подтвердить", callback_data=f"status_{order_id}_confirmed"),
-                    InlineKeyboardButton("👨‍🍳 Готовится", callback_data=f"status_{order_id}_cooking")
-                ],
-                [
-                    InlineKeyboardButton("🎉 Готов", callback_data=f"status_{order_id}_ready"),
-                    InlineKeyboardButton("📦 Доставлен", callback_data=f"status_{order_id}_delivered")
-                ],
-                [
-                    InlineKeyboardButton("❌ Отменить", callback_data=f"status_{order_id}_cancelled")
-                ],
-                [
-                    InlineKeyboardButton("🔙 Назад", callback_data="orders_all")
-                ]
+        keyboard = [
+            [
+                InlineKeyboardButton("✅ Подтвердить", callback_data=f"status_{order_id}_confirmed"),
+                InlineKeyboardButton("👨‍🍳 Готовится", callback_data=f"status_{order_id}_cooking")
+            ],
+            [
+                InlineKeyboardButton("🎉 Готов", callback_data=f"status_{order_id}_ready"),
+                InlineKeyboardButton("📦 Доставлен", callback_data=f"status_{order_id}_delivered")
+            ],
+            [
+                InlineKeyboardButton("❌ Отменить", callback_data=f"status_{order_id}_cancelled")
+            ],
+            [
+                InlineKeyboardButton("🔙 Назад", callback_data="orders_all")
             ]
-        else:
-            keyboard = [
-                [InlineKeyboardButton("🔙 К моим заказам", callback_data="my_orders")]
-            ]
-        
+        ]
         reply_markup = InlineKeyboardMarkup(keyboard)
         
         await query.edit_message_text(
@@ -1094,9 +1014,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 GROUP BY o.id
             ''', (order_id,))
             order = dict(cursor.fetchone())
-        
-        # Отправляем уведомление пользователю
-        await notify_user_status_change(context.application, order_id, new_status)
         
         keyboard = [
             [InlineKeyboardButton("📝 Подробнее", callback_data=f"order_detail_{order_id}")],
