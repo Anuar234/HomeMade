@@ -55,6 +55,7 @@ def init_database():
                 customer_telegram TEXT,
                 customer_address TEXT,
                 customer_phone TEXT,
+                user_telegram_id INTEGER,
                 total_amount REAL,
                 status TEXT DEFAULT 'pending',
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
