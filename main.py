@@ -87,11 +87,49 @@ def init_db():
         ''')
         
         conn.commit()
-        
+
+        # Добавляем недостающие колонки
+        add_missing_columns_legacy()
+
         # Заполняем начальными данными, если таблица пустая
         cursor.execute('SELECT COUNT(*) as count FROM products')
         if cursor.fetchone()['count'] == 0:
             seed_products(conn)
+
+def add_missing_columns_legacy():
+    """Добавляет недостающие колонки в существующую БД (для main.py)"""
+    with get_db() as conn:
+        cursor = conn.cursor()
+
+        # Добавляем customer_telegram в orders
+        try:
+            cursor.execute("SELECT customer_telegram FROM orders LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute("ALTER TABLE orders ADD COLUMN customer_telegram TEXT")
+            print("✅ Добавлена колонка customer_telegram в таблицу orders")
+
+        # Добавляем user_telegram_id в orders
+        try:
+            cursor.execute("SELECT user_telegram_id FROM orders LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute("ALTER TABLE orders ADD COLUMN user_telegram_id INTEGER")
+            print("✅ Добавлена колонка user_telegram_id в таблицу orders")
+
+        # Добавляем cook_telegram в products
+        try:
+            cursor.execute("SELECT cook_telegram FROM products LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute("ALTER TABLE products ADD COLUMN cook_telegram TEXT")
+            print("✅ Добавлена колонка cook_telegram в таблицу products")
+
+        # Добавляем cook_telegram в order_items
+        try:
+            cursor.execute("SELECT cook_telegram FROM order_items LIMIT 1")
+        except sqlite3.OperationalError:
+            cursor.execute("ALTER TABLE order_items ADD COLUMN cook_telegram TEXT")
+            print("✅ Добавлена колонка cook_telegram в таблицу order_items")
+
+        conn.commit()
 
 def seed_products(conn):
     """Заполнение БД начальными данными"""
@@ -206,6 +244,8 @@ class Order(BaseModel):
     customer_name: str
     customer_phone: str
     customer_address: str
+    customer_telegram: Optional[str] = None
+    user_telegram_id: Optional[int] = None
     items: List[OrderItem]
     total_amount: Optional[float] = None
     status: str = "pending"
@@ -247,6 +287,7 @@ async def get_app():
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Home Food Abu Dhabi</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
         <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
         <style>
@@ -431,6 +472,7 @@ async def get_app_category(category: str):
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{category_display} - Home Food Abu Dhabi</title>
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
         <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
         <style>
             body {{ 
@@ -1083,16 +1125,22 @@ async def get_app_category(category: str):
 
                 const submitOrder = async () => {{
                     if (cart.value.length === 0) return;
-                    
+
                     isSubmitting.value = true;
                     orderError.value = null;
-                    
+
                     try {{
+                        // Получаем данные пользователя из Telegram WebApp
+                        const tg = window.Telegram?.WebApp;
+                        const user = tg?.initDataUnsafe?.user;
+
                         // Подготавливаем данные заказа
                         const orderData = {{
                             customer_name: customerInfo.value.name,
                             customer_phone: customerInfo.value.phone,
                             customer_address: customerInfo.value.address,
+                            customer_telegram: user?.username || '',
+                            user_telegram_id: user?.id || null,
                             items: cart.value.map(item => ({{
                                 product_id: item.id,
                                 quantity: item.quantity
@@ -1281,13 +1329,16 @@ async def create_order(order: Order):
         
         # Сохраняем заказ
         cursor.execute('''
-            INSERT INTO orders (id, customer_name, customer_phone, customer_address, total_amount, status, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
+            INSERT INTO orders (id, customer_name, customer_phone, customer_address,
+                               customer_telegram, user_telegram_id, total_amount, status, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (
             order_id,
             order.customer_name,
             order.customer_phone,
             order.customer_address,
+            order.customer_telegram,
+            order.user_telegram_id,
             total,
             order.status,
             created_at.isoformat()
