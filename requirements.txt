@@ -1,8 +1,13 @@
+# Web Framework
 fastapi==0.115.0
 uvicorn[standard]==0.30.0
 pydantic==2.9.2
 python-multipart==0.0.6
 jinja2
+
+# Telegram Bot
 python-telegram-bot==21.7
+
+# Utils
 python-dotenv
 httpx
