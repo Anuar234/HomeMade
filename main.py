@@ -1546,18 +1546,20 @@ async def create_order(order: Order):
             cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
             row = cursor.fetchone()
             if row:
+                # Конвертируем Row в dict для безопасного доступа
+                row_dict = dict(row)
                 cursor.execute('''
                     INSERT INTO order_items (order_id, product_id, product_name, quantity, price, cook_name, cook_phone, cook_telegram)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     order_id,
                     item.product_id,
-                    row['name'],
+                    row_dict['name'],
                     item.quantity,
-                    row['price'],
-                    row['cook_name'],
-                    row['cook_phone'],
-                    row.get('cook_telegram', '')
+                    row_dict['price'],
+                    row_dict.get('cook_name', ''),
+                    row_dict.get('cook_phone', ''),
+                    row_dict.get('cook_telegram', '')
                 ))
 
         conn.commit()
