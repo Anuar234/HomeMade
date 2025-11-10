@@ -223,6 +223,203 @@ def seed_products(conn):
 # Инициализируем БД при старте
 init_db()
 
+# === TELEGRAM NOTIFICATIONS ===
+async def send_telegram_notifications(order: dict):
+    """Отправка уведомлений в Telegram о новом заказе"""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        BOT_TOKEN = os.getenv("BOT_TOKEN")
+        ADMIN_IDS_STR = os.getenv("ADMIN_IDS", "")
+        ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip()]
+
+        if not BOT_TOKEN:
+            print("⚠️ BOT_TOKEN не установлен, уведомления не отправлены")
+            return
+
+        from telegram import Bot
+        bot = Bot(token=BOT_TOKEN)
+
+        # Форматируем заказ для отображения
+        status_emoji = {
+            'pending': '🕐',
+            'confirmed': '✅',
+            'cooking': '👨‍🍳',
+            'ready': '🎉',
+            'delivered': '📦',
+            'cancelled': '❌'
+        }
+
+        emoji = status_emoji.get(order.get('status', 'pending'), '🕐')
+
+        items_text = ""
+        if order.get('items_data'):
+            for item_str in order['items_data'].split(','):
+                parts = item_str.split(':')
+                if len(parts) >= 4:
+                    product_name = parts[1]
+                    quantity = parts[2]
+                    price = parts[3]
+                    cook_telegram = parts[4] if len(parts) > 4 else ''
+
+                    cook_info = f" (👨‍🍳 @{cook_telegram})" if cook_telegram else ""
+                    items_text += f"  • {product_name} x{quantity} = {price} AED{cook_info}\n"
+
+        created = datetime.fromisoformat(order['created_at']).strftime('%d.%m.%Y %H:%M')
+
+        customer_telegram = order.get('customer_telegram', 'Не указан')
+        telegram_display = f"@{customer_telegram}" if customer_telegram and customer_telegram != 'Не указан' else customer_telegram
+
+        # Сообщение для админов
+        admin_message = f"""
+🔔 <b>НОВЫЙ ЗАКАЗ!</b>
+
+📋 <b>Заказ #{order['id']}</b>
+{emoji} <b>Статус:</b> Ожидает обработки
+
+👤 <b>Имя:</b> {order.get('customer_name', 'Не указано')}
+📱 <b>Telegram:</b> {telegram_display}
+📍 <b>Адрес:</b> {order.get('customer_address', 'Не указан')}
+📞 <b>Телефон:</b> {order.get('customer_phone', 'Не указан')}
+
+🛒 <b>Состав заказа:</b>
+{items_text}
+💰 <b>Итого:</b> {order['total_amount']} AED
+
+🕐 <b>Создан:</b> {created}
+
+<b>Пожалуйста, обработайте заказ через /start</b>
+"""
+
+        # Сообщение для пользователя
+        user_message = f"""
+✅ <b>Ваш заказ создан!</b>
+
+📋 <b>Заказ #{order['id']}</b>
+{emoji} <b>Статус:</b> Ожидает подтверждения
+
+🛒 <b>Состав заказа:</b>
+{items_text}
+💰 <b>Итого:</b> {order['total_amount']} AED
+
+📍 <b>Адрес доставки:</b> {order.get('customer_address', 'Не указан')}
+
+<b>Мы свяжемся с вами в ближайшее время!</b>
+Вы можете отслеживать статус заказа через /start → "Мои заказы"
+"""
+
+        # Отправляем админам
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    chat_id=admin_id,
+                    text=admin_message,
+                    parse_mode='HTML'
+                )
+                print(f"✅ Уведомление отправлено админу {admin_id}")
+            except Exception as e:
+                print(f"❌ Ошибка отправки админу {admin_id}: {e}")
+
+        # Отправляем пользователю
+        user_telegram_id = order.get('user_telegram_id')
+        if user_telegram_id:
+            try:
+                await bot.send_message(
+                    chat_id=user_telegram_id,
+                    text=user_message,
+                    parse_mode='HTML'
+                )
+                print(f"✅ Уведомление отправлено пользователю {user_telegram_id}")
+            except Exception as e:
+                print(f"❌ Ошибка отправки пользователю {user_telegram_id}: {e}")
+                print(f"   Возможно, пользователь не написал боту /start")
+        else:
+            print("⚠️ user_telegram_id не указан, уведомление пользователю не отправлено")
+
+    except Exception as e:
+        print(f"❌ Ошибка отправки уведомлений: {e}")
+        import traceback
+        traceback.print_exc()
+
+async def send_status_update_notification(order: dict):
+    """Отправка уведомления пользователю об изменении статуса заказа"""
+    try:
+        from dotenv import load_dotenv
+        load_dotenv()
+
+        BOT_TOKEN = os.getenv("BOT_TOKEN")
+        user_telegram_id = order.get('user_telegram_id')
+
+        if not BOT_TOKEN:
+            print("⚠️ BOT_TOKEN не установлен, уведомление не отправлено")
+            return
+
+        if not user_telegram_id:
+            print("⚠️ user_telegram_id не указан, уведомление не отправлено")
+            return
+
+        from telegram import Bot
+        bot = Bot(token=BOT_TOKEN)
+
+        # Статусы на русском
+        status_names = {
+            'pending': '🕐 Ожидает обработки',
+            'confirmed': '✅ Подтвержден',
+            'cooking': '👨‍🍳 Готовится',
+            'ready': '🎉 Готов к получению',
+            'delivered': '📦 Доставлен',
+            'cancelled': '❌ Отменен'
+        }
+
+        status = order.get('status', 'pending')
+        status_text = status_names.get(status, status)
+
+        items_text = ""
+        if order.get('items_data'):
+            for item_str in order['items_data'].split(','):
+                parts = item_str.split(':')
+                if len(parts) >= 4:
+                    product_name = parts[1]
+                    quantity = parts[2]
+                    items_text += f"  • {product_name} x{quantity}\n"
+
+        message = f"""
+📢 <b>Обновление статуса заказа</b>
+
+📋 <b>Заказ #{order['id']}</b>
+{status_text}
+
+🛒 <b>Состав:</b>
+{items_text}
+💰 <b>Итого:</b> {order['total_amount']} AED
+
+📍 <b>Адрес:</b> {order.get('customer_address', 'Не указан')}
+"""
+
+        # Дополнительная информация в зависимости от статуса
+        if status == 'confirmed':
+            message += "\n<b>Ваш заказ принят в работу!</b> Ожидайте начала приготовления."
+        elif status == 'cooking':
+            message += "\n<b>Ваш заказ готовится!</b> Скоро всё будет готово 👨‍🍳"
+        elif status == 'ready':
+            message += "\n<b>Ваш заказ готов!</b> Ожидайте доставку 🎉"
+        elif status == 'delivered':
+            message += "\n<b>Приятного аппетита!</b> Спасибо за заказ! 😊"
+        elif status == 'cancelled':
+            message += "\n<b>Заказ отменен.</b> Если у вас есть вопросы, свяжитесь с поддержкой."
+
+        await bot.send_message(
+            chat_id=user_telegram_id,
+            text=message,
+            parse_mode='HTML'
+        )
+        print(f"✅ Уведомление о статусе '{status}' отправлено пользователю {user_telegram_id}")
+
+    except Exception as e:
+        print(f"❌ Ошибка отправки уведомления о статусе: {e}")
+        print(f"   Возможно, пользователь не написал боту /start")
+
 # === MODELS ===
 class Product(BaseModel):
     id: str
@@ -1313,20 +1510,20 @@ async def get_product(product_id: str):
 @app.post("/api/orders", response_model=Order)
 async def create_order(order: Order):
     """Создать новый заказ в БД"""
-    order_id = str(uuid.uuid4())
+    order_id = str(uuid.uuid4())[:8]  # Короткий ID
     created_at = datetime.now()
-    
+
     # Вычисляем общую сумму
     total = 0
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         for item in order.items:
             cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
             row = cursor.fetchone()
             if row:
                 total += row['price'] * item.quantity
-        
+
         # Сохраняем заказ
         cursor.execute('''
             INSERT INTO orders (id, customer_name, customer_phone, customer_address,
@@ -1343,15 +1540,15 @@ async def create_order(order: Order):
             order.status,
             created_at.isoformat()
         ))
-        
+
         # Сохраняем элементы заказа с информацией о продукте и поваре
         for item in order.items:
             cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
             row = cursor.fetchone()
             if row:
                 cursor.execute('''
-                    INSERT INTO order_items (order_id, product_id, product_name, quantity, price, cook_name, cook_phone)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO order_items (order_id, product_id, product_name, quantity, price, cook_name, cook_phone, cook_telegram)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     order_id,
                     item.product_id,
@@ -1359,15 +1556,35 @@ async def create_order(order: Order):
                     item.quantity,
                     row['price'],
                     row['cook_name'],
-                    row['cook_phone']
+                    row['cook_phone'],
+                    row.get('cook_telegram', '')
                 ))
-        
+
         conn.commit()
-    
+
+        # Получаем полный заказ для уведомлений
+        cursor.execute('''
+            SELECT o.*,
+                   GROUP_CONCAT(
+                       oi.product_id || ':' || oi.product_name || ':' ||
+                       oi.quantity || ':' || oi.price || ':' ||
+                       COALESCE(oi.cook_telegram, '')
+                   ) as items_data
+            FROM orders o
+            LEFT JOIN order_items oi ON o.id = oi.order_id
+            WHERE o.id = ?
+            GROUP BY o.id
+        ''', (order_id,))
+        full_order = dict(cursor.fetchone())
+
     order.id = order_id
     order.total_amount = total
     order.created_at = created_at.isoformat()
-    
+
+    # 🔥 ОТПРАВЛЯЕМ УВЕДОМЛЕНИЯ!
+    import asyncio
+    asyncio.create_task(send_telegram_notifications(full_order))
+
     return order
 
 
@@ -1450,20 +1667,41 @@ async def get_order(order_id: str):
 async def update_order_status(order_id: str, status: str):
     """Обновить статус заказа"""
     valid_statuses = ['pending', 'confirmed', 'cooking', 'ready', 'delivered', 'cancelled']
-    
+
     if status not in valid_statuses:
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {{valid_statuses}}")
-    
+
     with get_db() as conn:
         cursor = conn.cursor()
         cursor.execute('UPDATE orders SET status = ? WHERE id = ?', (status, order_id))
-        
+
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Order not found")
-        
+
         conn.commit()
-    
-    return {{"message": "Order status router", "order_id": order_id, "status": status}}
+
+        # Получаем данные заказа для уведомления
+        cursor.execute('''
+            SELECT o.*,
+                   GROUP_CONCAT(
+                       oi.product_id || ':' || oi.product_name || ':' ||
+                       oi.quantity || ':' || oi.price || ':' ||
+                       COALESCE(oi.cook_telegram, '')
+                   ) as items_data
+            FROM orders o
+            LEFT JOIN order_items oi ON o.id = oi.order_id
+            WHERE o.id = ?
+            GROUP BY o.id
+        ''', (order_id,))
+        order = cursor.fetchone()
+
+    if order:
+        order_dict = dict(order)
+        # 🔥 Отправляем уведомление о смене статуса
+        import asyncio
+        asyncio.create_task(send_status_update_notification(order_dict))
+
+    return {{"message": "Order status updated", "order_id": order_id, "status": status}}
 
 
 @app.delete("/api/orders/{order_id}")

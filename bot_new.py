@@ -18,10 +18,79 @@ from telegram.ext import (
 from src.config import BOT_TOKEN, ADMIN_IDS, WEB_APP_URL
 from src.database import get_db, init_database, add_missing_columns
 from src.bot.utils import is_admin, format_order
+from telegram import Bot
 
 # Conversation states
 (NAME, DESCRIPTION, PRICE, IMAGE, COOK_TELEGRAM,
  CATEGORY, INGREDIENTS, CONFIRM) = range(8)
+
+
+# === HELPER FUNCTIONS ===
+async def send_status_notification_to_user(user_telegram_id: int, order: dict, new_status: str):
+    """Отправка уведомления пользователю об изменении статуса заказа"""
+    try:
+        if not BOT_TOKEN:
+            print("⚠️ BOT_TOKEN не установлен")
+            return
+
+        bot = Bot(token=BOT_TOKEN)
+
+        # Статусы на русском
+        status_names = {
+            'pending': '🕐 Ожидает обработки',
+            'confirmed': '✅ Подтвержден',
+            'cooking': '👨‍🍳 Готовится',
+            'ready': '🎉 Готов к получению',
+            'delivered': '📦 Доставлен',
+            'cancelled': '❌ Отменен'
+        }
+
+        status_text = status_names.get(new_status, new_status)
+
+        items_text = ""
+        if order.get('items_data'):
+            for item_str in order['items_data'].split(','):
+                parts = item_str.split(':')
+                if len(parts) >= 4:
+                    product_name = parts[1]
+                    quantity = parts[2]
+                    items_text += f"  • {product_name} x{quantity}\n"
+
+        message = f"""
+📢 <b>Обновление статуса заказа</b>
+
+📋 <b>Заказ #{order['id']}</b>
+{status_text}
+
+🛒 <b>Состав:</b>
+{items_text}
+💰 <b>Итого:</b> {order['total_amount']} AED
+
+📍 <b>Адрес:</b> {order.get('customer_address', 'Не указан')}
+"""
+
+        # Дополнительная информация в зависимости от статуса
+        if new_status == 'confirmed':
+            message += "\n<b>Ваш заказ принят в работу!</b> Ожидайте начала приготовления."
+        elif new_status == 'cooking':
+            message += "\n<b>Ваш заказ готовится!</b> Скоро всё будет готово 👨‍🍳"
+        elif new_status == 'ready':
+            message += "\n<b>Ваш заказ готов!</b> Ожидайте доставку 🎉"
+        elif new_status == 'delivered':
+            message += "\n<b>Приятного аппетита!</b> Спасибо за заказ! 😊"
+        elif new_status == 'cancelled':
+            message += "\n<b>Заказ отменен.</b> Если у вас есть вопросы, свяжитесь с поддержкой."
+
+        await bot.send_message(
+            chat_id=user_telegram_id,
+            text=message,
+            parse_mode='HTML'
+        )
+        print(f"✅ Уведомление о статусе '{new_status}' отправлено пользователю {user_telegram_id}")
+
+    except Exception as e:
+        print(f"❌ Ошибка отправки уведомления о статусе: {e}")
+        print(f"   Возможно, пользователь заблокировал бота")
 
 
 # === COMMAND HANDLERS ===
@@ -330,6 +399,11 @@ async def update_order_status(query, data):
             GROUP BY o.id
         ''', (order_id,))
         order = dict(cursor.fetchone())
+
+    # 🔥 Отправляем уведомление пользователю о смене статуса
+    user_telegram_id = order.get('user_telegram_id')
+    if user_telegram_id:
+        await send_status_notification_to_user(user_telegram_id, order, new_status)
 
     keyboard = [
         [InlineKeyboardButton("📝 Подробнее", callback_data=f"order_detail_{order_id}")]
