@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 """
-Универсальный запуск Home Food Abu Dhabi
-Webhook для production (Railway) и polling для local
+Home Food Abu Dhabi - Webhook для Railway с поддержкой ConversationHandler
 """
 
 import os
@@ -15,119 +14,147 @@ print("=" * 50)
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8000))
 RAILWAY_URL = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
-IS_RAILWAY = RAILWAY_URL is not None
 
 print(f"BOT_TOKEN: {BOT_TOKEN[:10] if BOT_TOKEN else 'Not set'}...")
 print(f"PORT: {PORT}")
-print(f"ENVIRONMENT: {'Railway (Production)' if IS_RAILWAY else 'Local (Development)'}")
-print(f"MODE: {'Webhook' if IS_RAILWAY else 'Polling'}")
+print(f"RAILWAY_URL: {RAILWAY_URL}")
 print("=" * 50)
 
 bot_application = None
 
 @asynccontextmanager
 async def lifespan(app):
-    """Lifespan для FastAPI - настройка и остановка бота"""
+    """Lifespan для FastAPI"""
     global bot_application
     
     print("FastAPI starting up...")
     
     if not BOT_TOKEN:
-        print("⚠️ BOT_TOKEN not set, skipping bot initialization")
+        print("⚠️ BOT_TOKEN not set")
         yield
         return
     
     try:
-        # Импортируем бота
         import bot
-        from telegram import Update
-        
         print(f"Database: {'PostgreSQL' if bot.db.use_postgres else 'SQLite'}")
         
         # Создаем приложение
         application = bot.create_application()
         
         if application:
+            # КРИТИЧЕСКИ ВАЖНО: инициализируем приложение полностью
             await application.initialize()
+            
+            # ВАЖНО: запускаем приложение (это инициализирует persistence и handlers)
             await application.start()
             
-            if IS_RAILWAY:
-                # Production: Webhook
-                webhook_url = f"https://{RAILWAY_URL}/webhook"
-                print(f"🌐 Setting webhook: {webhook_url}")
-                
-                await application.bot.delete_webhook(drop_pending_updates=True)
-                await application.bot.set_webhook(url=webhook_url)
-                
-                print("✅ Webhook set successfully")
-            else:
-                # Local: Polling
-                print("🔄 Starting polling...")
-                await application.bot.delete_webhook(drop_pending_updates=True)
-                await application.updater.start_polling(drop_pending_updates=True)
-                print("✅ Polling started")
+            # Настройка webhook
+            webhook_url = f"https://{RAILWAY_URL}/webhook/{BOT_TOKEN}"
+            print(f"🌐 Setting webhook: {webhook_url}")
             
+            await application.bot.delete_webhook(drop_pending_updates=True)
+            await application.bot.set_webhook(
+                url=webhook_url,
+                allowed_updates=["message", "callback_query"]
+            )
+            
+            print("✅ Webhook configured")
             bot_application = application
+            
+            # ВАЖНО: Запускаем обработчик очереди в фоне
+            asyncio.create_task(process_updates())
         
     except Exception as e:
-        print(f"❌ Bot initialization error: {e}")
+        print(f"❌ Error: {e}")
         import traceback
         traceback.print_exc()
     
-    yield  # Приложение работает
+    yield
     
-    # Остановка
-    print("Shutting down bot...")
+    # Shutdown
     if bot_application:
         try:
-            if not IS_RAILWAY and bot_application.updater.running:
-                await bot_application.updater.stop()
             await bot_application.stop()
             await bot_application.shutdown()
         except Exception as e:
-            print(f"Error during shutdown: {e}")
+            print(f"Shutdown error: {e}")
 
 
-# Импортируем FastAPI app
+async def process_updates():
+    """Обработчик очереди updates - необходим для ConversationHandler"""
+    global bot_application
+    
+    if not bot_application:
+        return
+    
+    print("🔄 Starting update processor...")
+    
+    try:
+        # Непрерывно обрабатываем updates из очереди
+        while True:
+            try:
+                # Получаем update из очереди (ждём максимум 1 секунду)
+                update = await asyncio.wait_for(
+                    bot_application.update_queue.get(),
+                    timeout=1.0
+                )
+                
+                # Обрабатываем update через все handlers
+                await bot_application.process_update(update)
+                
+            except asyncio.TimeoutError:
+                # Таймаут - это нормально, продолжаем ждать
+                continue
+            except Exception as e:
+                print(f"❌ Error processing update: {e}")
+                import traceback
+                traceback.print_exc()
+    except asyncio.CancelledError:
+        print("Update processor cancelled")
+
+
 from main import app as fastapi_app
 from fastapi import Request, Response
 
-# Применяем lifespan
 fastapi_app.router.lifespan_context = lifespan
 
 
-# Webhook endpoint
-@fastapi_app.post("/webhook")
-async def webhook(request: Request):
-    """Обработчик Telegram webhook (только для Railway)"""
-    if not IS_RAILWAY:
-        return Response(status_code=403, content="Webhook only available in production")
+@fastapi_app.post("/webhook/{token}")
+async def webhook(token: str, request: Request):
+    """Telegram webhook"""
+    if token != BOT_TOKEN:
+        return Response(status_code=403)
     
     if not bot_application:
-        print("⚠️ Webhook received but bot not ready")
-        return Response(status_code=503, content="Bot not ready")
+        return Response(status_code=503)
     
     try:
         from telegram import Update
         
-        # Получаем данные
         data = await request.json()
-        print(f"📨 Webhook received: {data.get('update_id', 'unknown')}")
+        update_id = data.get('update_id', 'unknown')
         
-        # Создаём Update объект
+        # Логируем детали
+        if 'message' in data:
+            msg = data['message']
+            print(f"📨 Message [{update_id}]: {msg.get('text', 'no text')[:50]}")
+        elif 'callback_query' in data:
+            cb = data['callback_query']
+            print(f"📨 Callback [{update_id}]: {cb.get('data', 'no data')}")
+        
+        # Создаём Update
         update = Update.de_json(data, bot_application.bot)
         
-        # Обрабатываем update СИНХРОННО
-        await bot_application.process_update(update)
+        # Кладём в очередь для обработки
+        await bot_application.update_queue.put(update)
         
-        print(f"✅ Update processed: {update.update_id}")
-        return Response(status_code=200, content="OK")
+        return {"ok": True}
     
     except Exception as e:
         print(f"❌ Webhook error: {e}")
         import traceback
         traceback.print_exc()
-        return Response(status_code=200, content="OK")  # Всё равно возвращаем 200
+        return {"ok": False}
 
 
 if __name__ == "__main__":

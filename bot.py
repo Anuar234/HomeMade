@@ -357,36 +357,46 @@ async def products_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
 
 async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    print("🔵 add_product_start called")
+    print("🔵 add_product_start CALLED!")
+    print(f"   Update type: {update.update_id}")
+    print(f"   User: {update.effective_user.id if update.effective_user else 'None'}")
     
     query = update.callback_query if update.callback_query else None
     
     if query:
-        print(f"📞 Callback query: {query.data}")
+        print(f"   Callback data: {query.data}")
         await query.answer()
+        
         if not is_admin(query.from_user.id):
+            print("   ❌ Not admin")
             await query.edit_message_text("❌ Только для администраторов")
             return ConversationHandler.END
+        
         message = query.message
     else:
-        print(f"💬 Message from user: {update.effective_user.id}")
+        print(f"   Command message")
         if not is_admin(update.effective_user.id):
+            print("   ❌ Not admin")
             return ConversationHandler.END
         message = update.message
     
+    # Инициализируем данные
     context.user_data['new_product'] = {}
     
-    await message.reply_text(
+    response_text = (
         "📦 *Добавление нового продукта*\n\n"
         "Шаг 1 из 7\n\n"
         "*Введите название продукта:*\n\n"
         "Например: _Бургер Классический_\n\n"
-        "Или /cancel - для отмены",
-        parse_mode='HTML'
+        "Или /cancel - для отмены"
     )
     
-    print("✅ Sent initial message, waiting for NAME")
+    print(f"   ✅ Sending response and returning NAME state")
+    
+    await message.reply_text(response_text, parse_mode='HTML')
+    
     return NAME
+
 
 async def product_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение названия"""
