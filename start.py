@@ -1,187 +1,136 @@
 #!/usr/bin/env python3
 """
 Универсальный запуск Home Food Abu Dhabi
-Запускает FastAPI и Telegram Bot одновременно в одном процессе
-
-ВАЖНО: Обновите Procfile:
-web: python start.py
-
-Это запустит и API, и бота в одном процессе!
+Webhook для production (Railway) и polling для local
 """
 
 import os
 import asyncio
-import threading
 from contextlib import asynccontextmanager
 
 print("=" * 50)
 print("Home Food Abu Dhabi - Starting...")
 print("=" * 50)
 
-# Проверка переменных окружения
 BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8000))
+RAILWAY_URL = os.getenv("RAILWAY_PUBLIC_DOMAIN") or os.getenv("RAILWAY_STATIC_URL")
+IS_RAILWAY = RAILWAY_URL is not None
 
-if not BOT_TOKEN:
-    print("WARNING: BOT_TOKEN not set! Bot will not work.")
-    print("Set it in Railway environment variables")
-else:
-    print(f"BOT_TOKEN: {BOT_TOKEN[:10]}...")
-
+print(f"BOT_TOKEN: {BOT_TOKEN[:10] if BOT_TOKEN else 'Not set'}...")
 print(f"PORT: {PORT}")
-print(f"ADMIN_IDS: {os.getenv('ADMIN_IDS', 'Not set')}")
+print(f"ENVIRONMENT: {'Railway (Production)' if IS_RAILWAY else 'Local (Development)'}")
+print(f"MODE: {'Webhook' if IS_RAILWAY else 'Polling'}")
 print("=" * 50)
 
-
-def run_bot_in_thread():
-    """Запуск бота с созданием нового event loop для потока"""
-    if not BOT_TOKEN:
-        print("Skipping bot - no BOT_TOKEN")
-        return
-
-    try:
-        print("Starting Telegram Bot thread...")
-        
-        # КРИТИЧЕСКИ ВАЖНО: создаем новый event loop для этого потока
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Импортируем бота
-        import bot
-        from telegram import Update
-
-
-        print("Database: homefood.db")
-        print(f"Admins: {bot.ADMIN_IDS}")
-
-        # Создаем приложение через нашу функцию
-        application = bot.create_application()
-
-        if not application:
-            print("Failed to create bot application")
-            return
-
-        print("Bot started and listening for updates...")
-
-        # Запускаем бота асинхронно в текущем event loop
-        async def run_bot_async():
-            async with application:
-                await application.start()
-                await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-                # Держим бота живым
-                await asyncio.Event().wait()
-
-        # Запускаем
-        loop.run_until_complete(run_bot_async())
-
-
-    except Exception as e:
-        print(f"Bot error: {e}")
-        import traceback
-        traceback.print_exc()
-
-
-def start_bot_thread():
-    """Запускаем бота в отдельном потоке с daemon=True"""
-    bot_thread = threading.Thread(
-        target=run_bot_in_thread,
-        daemon=True,
-        name="TelegramBotThread"
-    )
-    bot_thread.start()
-    print("Bot thread started")
-    return bot_thread
-
-def run_bot_in_thread():
-    """Запуск бота с созданием нового event loop для потока"""
-    if not BOT_TOKEN:
-        print("Skipping bot - no BOT_TOKEN")
-        return
-
-    try:
-        print("Starting Telegram Bot thread...")
-        
-        # Создаем новый event loop для этого потока
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
-        # Импортируем бота
-        import bot
-        from telegram import Update, Bot
-
-        print(f"Database: {'PostgreSQL' if bot.db.use_postgres else 'SQLite'}")
-        print(f"Admins: {bot.ADMIN_IDS}")
-
-        # Создаем приложение
-        application = bot.create_application()
-
-        if not application:
-            print("Failed to create bot application")
-            return
-
-        print("Bot started and listening for updates...")
-
-        # Запускаем бота асинхронно
-        async def run_bot_async():
-            # Удаляем webhook перед запуском polling
-            try:
-                await application.bot.delete_webhook(drop_pending_updates=True)
-                print("✅ Webhook cleared, starting polling...")
-            except Exception as e:
-                print(f"⚠️ Could not clear webhook: {e}")
-            
-            async with application:
-                await application.start()
-                await application.updater.start_polling(
-                    allowed_updates=Update.ALL_TYPES,
-                    drop_pending_updates=True
-                )
-                # Держим бота живым
-                await asyncio.Event().wait()
-
-        # Запускаем
-        loop.run_until_complete(run_bot_async())
-
-    except Exception as e:
-        print(f"Bot error: {e}")
-        import traceback
-        traceback.print_exc()
-
+bot_application = None
 
 @asynccontextmanager
 async def lifespan(app):
-    """Lifespan events для FastAPI - запускаем бота при старте"""
+    """Lifespan для FastAPI - настройка и остановка бота"""
+    global bot_application
+    
     print("FastAPI starting up...")
-
-    # Запускаем бота в отдельном потоке
-    start_bot_thread()
-
+    
+    if not BOT_TOKEN:
+        print("⚠️ BOT_TOKEN not set, skipping bot initialization")
+        yield
+        return
+    
+    try:
+        # Импортируем бота
+        import bot
+        from telegram import Update
+        
+        print(f"Database: {'PostgreSQL' if bot.db.use_postgres else 'SQLite'}")
+        
+        # Создаем приложение
+        application = bot.create_application()
+        
+        if application:
+            await application.initialize()
+            await application.start()
+            
+            if IS_RAILWAY:
+                # Production: Webhook
+                webhook_url = f"https://{RAILWAY_URL}/webhook"
+                print(f"🌐 Setting webhook: {webhook_url}")
+                
+                await application.bot.delete_webhook(drop_pending_updates=True)
+                await application.bot.set_webhook(url=webhook_url)
+                
+                print("✅ Webhook set successfully")
+            else:
+                # Local: Polling
+                print("🔄 Starting polling...")
+                await application.bot.delete_webhook(drop_pending_updates=True)
+                await application.updater.start_polling(drop_pending_updates=True)
+                print("✅ Polling started")
+            
+            bot_application = application
+        
+    except Exception as e:
+        print(f"❌ Bot initialization error: {e}")
+        import traceback
+        traceback.print_exc()
+    
     yield  # Приложение работает
+    
+    # Остановка
+    print("Shutting down bot...")
+    if bot_application:
+        try:
+            if not IS_RAILWAY and bot_application.updater.running:
+                await bot_application.updater.stop()
+            await bot_application.stop()
+            await bot_application.shutdown()
+        except Exception as e:
+            print(f"Error during shutdown: {e}")
 
-    print("FastAPI shutting down...")
 
-
-# Импортируем FastAPI app и добавляем lifespan
+# Импортируем FastAPI app
 from main import app as fastapi_app
+from fastapi import Request, Response
 
-# Заменяем lifespan в существующем app
+# Применяем lifespan
 fastapi_app.router.lifespan_context = lifespan
+
+
+# Webhook endpoint
+@fastapi_app.post("/webhook")
+async def webhook(request: Request):
+    """Обработчик Telegram webhook (только для Railway)"""
+    if not IS_RAILWAY:
+        return Response(status_code=403, content="Webhook only available in production")
+    
+    if not bot_application:
+        return Response(status_code=503, content="Bot not ready")
+    
+    try:
+        from telegram import Update
+        
+        data = await request.json()
+        update = Update.de_json(data, bot_application.bot)
+        
+        # Обрабатываем в фоне
+        asyncio.create_task(bot_application.process_update(update))
+        
+        return Response(status_code=200, content="OK")
+    
+    except Exception as e:
+        print(f"❌ Webhook error: {e}")
+        return Response(status_code=500, content=str(e))
 
 
 if __name__ == "__main__":
     import uvicorn
-
-    print(f"Starting FastAPI on 0.0.0.0:{PORT}")
-    print("=" * 50)
-    print(f"DATABASE_URL: {os.getenv('DATABASE_URL', 'Not set')[:30]}...")
-    print(f"Using: {'PostgreSQL' if os.getenv('DATABASE_URL') else 'SQLite'}")
-
     
-    # Запускаем FastAPI (бот запустится автоматически через lifespan)
+    print(f"Starting server on 0.0.0.0:{PORT}")
+    print("=" * 50)
+    
     uvicorn.run(
         fastapi_app,
         host="0.0.0.0",
         port=PORT,
-        log_level="info",
-        access_log=True
+        log_level="info"
     )
