@@ -9,6 +9,9 @@ import uuid
 import os
 from datetime import datetime
 from contextlib import contextmanager
+import logging
+from psycopg2.extras import RealDictCursor
+
 
 # Import database adapter
 from database import db
@@ -1349,47 +1352,8 @@ async def get_app_category(category: str):
     """)
 
 
-@app.get("/api/products", response_model=List[Product])
-@app.get("/api/products", response_model=List[Product])
-async def get_products(category: Optional[str] = None):
-    print(f"🔍 API request: category={category}")
-    print(f"🔗 Database: {'PostgreSQL' if db.use_postgres else 'SQLite'}")
-    
-    with get_db() as conn:
-        cursor = conn.cursor()
-        
-        if category:
-            query = fix_query("SELECT * FROM products WHERE LOWER(category) = LOWER(?)")
-            cursor.execute(query, (category,))
-            print(f"📝 Query: {query} with category={category}")
-        else:
-            cursor.execute("SELECT * FROM products")
-            print(f"📝 Query: SELECT * FROM products")
-        
-        rows = cursor.fetchall()
-        print(f"📊 Found {len(rows)} products in database")
-        
-        # Показать первые продукты для дебага
-        for i, row in enumerate(rows[:3]):
-            row_dict = dict(row)
-            print(f"  Product {i+1}: {row_dict.get('name')} - {row_dict.get('category')}")
-        
-        products = []
-        for row in rows:
-            product = dict(row)
-            if product['ingredients']:
-                try:
-                    product['ingredients'] = json.loads(product['ingredients'])
-                except:
-                    product['ingredients'] = []
-            else:
-                product['ingredients'] = []
-            products.append(product)
-    
-    return products
+from psycopg2.extras import RealDictCursor
 
-
-@app.get("/api/products/{product_id}", response_model=Product)
 @app.get("/api/products", response_model=List[Product])
 async def get_products(category: Optional[str] = None):
     print(f"🔍 API request: category={category}")
@@ -1420,7 +1384,6 @@ async def get_products(category: Optional[str] = None):
         
         products = []
         for row in rows:
-            # Теперь row уже dict для PostgreSQL или Row для SQLite
             product = dict(row)
             
             print(f"  📦 Product: {product.get('id')} - {product.get('name')}")
@@ -1439,6 +1402,7 @@ async def get_products(category: Optional[str] = None):
     
     print(f"✅ Returning {len(products)} products")
     return products
+
 
 
 @app.post("/api/orders", response_model=Order)
