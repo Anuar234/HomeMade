@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, HTMLResponse
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,6 +12,9 @@ from contextlib import contextmanager
 
 # Import database adapter
 from database import db
+
+# Global variable to store bot application for webhook
+telegram_app = None
 
 app = FastAPI(title="Home Food Abu Dhabi!")
 
@@ -1647,6 +1650,26 @@ async def delete_order(order_id: str):
         conn.commit()
     
     return {{"message": "Order deleted", "order_id": order_id}}
+
+
+# === TELEGRAM WEBHOOK ===
+@app.post("/webhook")
+async def telegram_webhook(request: Request):
+    """Webhook endpoint для Telegram бота"""
+    try:
+        # Получаем telegram_app из start.py через bot модуль
+        import bot
+        if hasattr(bot, 'telegram_application') and bot.telegram_application:
+            data = await request.json()
+            from telegram import Update
+            update = Update.de_json(data, bot.telegram_application.bot)
+            await bot.telegram_application.process_update(update)
+            return {{"ok": True}}
+        else:
+            return {{"ok": False, "error": "Bot not initialized"}}
+    except Exception as e:
+        print(f"Webhook error: {{e}}")
+        return {{"ok": False, "error": str(e)}}
 
 
 if __name__ == "__main__":

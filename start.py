@@ -63,14 +63,30 @@ def run_bot_in_thread():
 
         print("Bot started and listening for updates...")
         
+        # Определяем режим работы (webhook для Railway, polling для локальной разработки)
+        RAILWAY_PUBLIC_DOMAIN = os.getenv("RAILWAY_PUBLIC_DOMAIN")
+        USE_WEBHOOK = RAILWAY_PUBLIC_DOMAIN is not None
+
         # Запускаем бота асинхронно в текущем event loop
         async def run_bot_async():
             async with application:
                 await application.start()
-                await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
-                # Держим бота живым
-                await asyncio.Event().wait()
-        
+
+                if USE_WEBHOOK:
+                    # Webhook режим для Railway
+                    webhook_url = f"https://{RAILWAY_PUBLIC_DOMAIN}/webhook"
+                    print(f"Setting webhook: {webhook_url}")
+                    await application.bot.set_webhook(url=webhook_url)
+                    print("Bot webhook configured - waiting for updates from Telegram")
+                    # Держим бота живым
+                    await asyncio.Event().wait()
+                else:
+                    # Polling режим для локальной разработки
+                    print("Using polling mode (local development)")
+                    await application.updater.start_polling(allowed_updates=Update.ALL_TYPES)
+                    # Держим бота живым
+                    await asyncio.Event().wait()
+
         # Запускаем
         loop.run_until_complete(run_bot_async())
 
