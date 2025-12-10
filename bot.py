@@ -357,34 +357,35 @@ async def products_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode='HTML', reply_markup=reply_markup)
 
 async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Начало добавления блюда"""
-    query = update.callback_query
+    print("🔵 add_product_start called")
+    
+    query = update.callback_query if update.callback_query else None
     
     if query:
+        print(f"📞 Callback query: {query.data}")
         await query.answer()
         if not is_admin(query.from_user.id):
-            await query.edit_message_text("❌ У вас нет доступа")
+            await query.edit_message_text("❌ Только для администраторов")
             return ConversationHandler.END
         message = query.message
     else:
+        print(f"💬 Message from user: {update.effective_user.id}")
         if not is_admin(update.effective_user.id):
             return ConversationHandler.END
         message = update.message
     
-    # Инициализируем временное хранилище
     context.user_data['new_product'] = {}
     
     await message.reply_text(
-        "🍽️ <b>ДОБАВЛЕНИЕ НОВОГО БЛЮДА</b>\n\n"
-        "Шаг 1 из 7\n"
-        "Введите <b>название блюда</b>:\n\n"
-        "✏️ Например: Домашние пельмени\n\n"
-        "💡 <i>Совет: Используйте понятное и аппетитное название</i>\n\n"
-        "📌 Команды:\n"
-        "/cancel - отменить добавление",
+        "📦 *Добавление нового продукта*\n\n"
+        "Шаг 1 из 7\n\n"
+        "*Введите название продукта:*\n\n"
+        "Например: _Бургер Классический_\n\n"
+        "Или /cancel - для отмены",
         parse_mode='HTML'
     )
     
+    print("✅ Sent initial message, waiting for NAME")
     return NAME
 
 async def product_name(update: Update, context: ContextTypes.DEFAULT_TYPE):

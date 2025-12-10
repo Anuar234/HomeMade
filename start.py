@@ -104,22 +104,30 @@ async def webhook(request: Request):
         return Response(status_code=403, content="Webhook only available in production")
     
     if not bot_application:
+        print("⚠️ Webhook received but bot not ready")
         return Response(status_code=503, content="Bot not ready")
     
     try:
         from telegram import Update
         
+        # Получаем данные
         data = await request.json()
+        print(f"📨 Webhook received: {data.get('update_id', 'unknown')}")
+        
+        # Создаём Update объект
         update = Update.de_json(data, bot_application.bot)
         
-        # Обрабатываем в фоне
-        asyncio.create_task(bot_application.process_update(update))
+        # Обрабатываем update СИНХРОННО
+        await bot_application.process_update(update)
         
+        print(f"✅ Update processed: {update.update_id}")
         return Response(status_code=200, content="OK")
     
     except Exception as e:
         print(f"❌ Webhook error: {e}")
-        return Response(status_code=500, content=str(e))
+        import traceback
+        traceback.print_exc()
+        return Response(status_code=200, content="OK")  # Всё равно возвращаем 200
 
 
 if __name__ == "__main__":
