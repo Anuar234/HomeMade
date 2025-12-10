@@ -1162,7 +1162,7 @@ def create_application():
     # Conversation handler для добавления продукта
     add_product_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(add_product_start, pattern='addproduct'),
+            CallbackQueryHandler(add_product_start, pattern='^add_product$'),
             CommandHandler('addproduct', add_product_start)
         ],
         states={
