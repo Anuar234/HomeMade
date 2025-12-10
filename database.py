@@ -57,6 +57,7 @@ class DatabaseAdapter:
         """
         with self.get_connection() as conn:
             if self.use_postgres:
+                from psycopg2.extras import RealDictCursor
                 cursor = conn.cursor(cursor_factory=RealDictCursor)
             else:
                 cursor = conn.cursor()
@@ -65,16 +66,10 @@ class DatabaseAdapter:
 
             if fetch == 'one':
                 result = cursor.fetchone()
-                if self.use_postgres:
-                    return dict(result) if result else None
-                else:
-                    return dict(result) if result else None
+                return dict(result) if result else None
             elif fetch == 'all':
                 results = cursor.fetchall()
-                if self.use_postgres:
-                    return [dict(row) for row in results]
-                else:
-                    return [dict(row) for row in results]
+                return [dict(row) for row in results]
             else:
                 conn.commit()
                 return cursor.lastrowid if not self.use_postgres else cursor.rowcount
