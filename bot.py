@@ -419,11 +419,13 @@ async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data['new_product'] = {}
     
     await message.reply_text(
-        "🍽️ <b>Добавление нового блюда</b>\n\n"
-        "Шаг 1 из 8\n"
+        "🍽️ <b>ДОБАВЛЕНИЕ НОВОГО БЛЮДА</b>\n\n"
+        "Шаг 1 из 7\n"
         "Введите <b>название блюда</b>:\n\n"
-        "Например: Домашние пельмени\n\n"
-        "Отправьте /cancel для отмены",
+        "✏️ Например: Домашние пельмени\n\n"
+        "💡 <i>Совет: Используйте понятное и аппетитное название</i>\n\n"
+        "📌 Команды:\n"
+        "/cancel - отменить добавление",
         parse_mode='HTML'
     )
     
@@ -431,93 +433,168 @@ async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def product_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение названия"""
-    context.user_data['new_product']['name'] = update.message.text
-    
+    name = update.message.text.strip()
+
+    if len(name) < 3:
+        await update.message.reply_text(
+            "❌ Название слишком короткое!\n\n"
+            "Введите название минимум из 3 символов:"
+        )
+        return NAME
+
+    context.user_data['new_product']['name'] = name
+
     await update.message.reply_text(
-        f"✅ Название: <b>{update.message.text}</b>\n\n"
-        "Шаг 2 из 8\n"
+        f"✅ Название: <b>{name}</b>\n\n"
+        "Шаг 2 из 7\n"
         "Введите <b>описание блюда</b>:\n\n"
-        "Например: Сочные пельмени с говядиной и свининой, как в России",
+        "✏️ Например: Сочные пельмени с говядиной и свининой, как в России\n\n"
+        "💡 <i>Совет: Опишите вкус, состав и особенности блюда</i>",
         parse_mode='HTML'
     )
-    
+
     return DESCRIPTION
 
 async def product_description(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение описания"""
-    context.user_data['new_product']['description'] = update.message.text
-    
+    description = update.message.text.strip()
+
+    if len(description) < 10:
+        await update.message.reply_text(
+            "❌ Описание слишком короткое!\n\n"
+            "Введите описание минимум из 10 символов:"
+        )
+        return DESCRIPTION
+
+    context.user_data['new_product']['description'] = description
+
     await update.message.reply_text(
-        f"✅ Описание сохранено\n\n"
-        "Шаг 3 из 8\n"
+        "✅ Описание сохранено\n\n"
+        "Шаг 3 из 7\n"
         "Введите <b>цену в AED</b> (только число):\n\n"
-        "Например: 25",
+        "✏️ Например: 25 или 35.5",
         parse_mode='HTML'
     )
-    
+
     return PRICE
 
 async def product_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение цены"""
     try:
-        price = float(update.message.text)
+        price_text = update.message.text.strip().replace(',', '.')
+        price = float(price_text)
         if price <= 0:
-            raise ValueError
-        
+            raise ValueError("Price must be positive")
+
         context.user_data['new_product']['price'] = price
-        
+
         await update.message.reply_text(
             f"✅ Цена: <b>{price} AED</b>\n\n"
-            "Шаг 4 из 8\n"
+            "Шаг 4 из 7\n"
             "Отправьте <b>ссылку на изображение блюда</b>:\n\n"
-            "Можно использовать ссылки с Unsplash, Imgur и т.д.\n"
-            "Например: https://images.unsplash.com/photo-1234567890",
+            "💡 <b>Совет:</b> Используйте Unsplash для качественных фото еды:\n"
+            "1. Перейдите на unsplash.com\n"
+            "2. Найдите подходящее фото\n"
+            "3. Скопируйте ссылку на изображение\n\n"
+            "Пример: https://images.unsplash.com/photo-1234567890?w=300",
             parse_mode='HTML'
         )
-        
+
         return IMAGE
-        
+
     except ValueError:
         await update.message.reply_text(
-            "❌ Ошибка! Введите корректное число.\n"
-            "Например: 25 или 35.5"
+            "❌ <b>Неверный формат цены!</b>\n\n"
+            "Введите число (целое или десятичное):\n"
+            "✅ Правильно: 25 или 35.5 или 42,90\n"
+            "❌ Неправильно: 25AED, двадцать пять\n\n"
+            "Попробуйте еще раз:",
+            parse_mode='HTML'
         )
         return PRICE
 
 async def product_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение изображения"""
-    image_url = update.message.text
-    
+    image_url = update.message.text.strip()
+
     # Простая валидация URL
     if not (image_url.startswith('http://') or image_url.startswith('https://')):
         await update.message.reply_text(
-            "❌ Пожалуйста, отправьте полную ссылку, начинающуюся с http:// или https://"
+            "❌ Пожалуйста, отправьте полную ссылку, начинающуюся с http:// или https://\n\n"
+            "Попробуйте еще раз:"
         )
         return IMAGE
-    
+
     context.user_data['new_product']['image'] = image_url
-    
+
+    # Отправляем превью изображения
+    try:
+        await update.message.reply_photo(
+            photo=image_url,
+            caption="✅ Изображение загружено успешно!"
+        )
+    except Exception as e:
+        await update.message.reply_text(
+            f"⚠️ Не удалось загрузить изображение по ссылке.\n"
+            f"Ошибка: {str(e)[:100]}\n\n"
+            f"Но ссылка сохранена. Проверьте её корректность.\n"
+            f"Хотите продолжить или ввести другую ссылку?\n\n"
+            f"Отправьте новую ссылку или /continue для продолжения"
+        )
+        return IMAGE
+
     await update.message.reply_text(
-        f"✅ Изображение сохранено\n\n"
         "Шаг 5 из 7\n"
         "Введите <b>Telegram username повара</b> (без @):\n\n"
-        "Например: turlubay",
+        "Например: turlubay\n"
+        "Или отправьте /skip чтобы пропустить",
         parse_mode='HTML'
     )
-    
+
     return COOK_TELEGRAM
 
 async def product_cook_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение Telegram username повара"""
-    telegram_username = update.message.text.replace('@', '').strip()
-    
-    if not telegram_username:
+    text = update.message.text.strip()
+
+    # Проверка на команды
+    if text == '/continue':
+        # Продолжаем с текущим изображением
+        pass
+    elif text == '/skip':
+        # Пропускаем username повара
+        context.user_data['new_product']['cook_telegram'] = ''
+        keyboard = [
+            [InlineKeyboardButton("🍔 burger", callback_data="cat_burger")],
+            [InlineKeyboardButton("🍕 pizza", callback_data="cat_pizza")],
+            [InlineKeyboardButton("🍚 plov", callback_data="cat_plov")],
+            [InlineKeyboardButton("🍲 soup", callback_data="cat_soup")],
+            [InlineKeyboardButton("🥟 pelmeni", callback_data="cat_pelmeni")],
+            [InlineKeyboardButton("🥖 khachapuri", callback_data="cat_khachapuri")],
+            [InlineKeyboardButton("🍰 dessert", callback_data="cat_dessert")],
+            [InlineKeyboardButton("🥗 salad", callback_data="cat_salad")],
+        ]
+        reply_markup = InlineKeyboardMarkup(keyboard)
+
         await update.message.reply_text(
-            "❌ Пожалуйста, введите корректный Telegram username"
+            "⏭️ Пропущено\n\n"
+            "Шаг 6 из 7\n"
+            "Выберите <b>категорию блюда</b>:",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
         )
-        return COOK_TELEGRAM
-    
-    context.user_data['new_product']['cook_telegram'] = telegram_username
+        return CATEGORY
+    else:
+        telegram_username = text.replace('@', '').strip()
+
+        if not telegram_username:
+            await update.message.reply_text(
+                "❌ Пожалуйста, введите корректный Telegram username\n"
+                "Или отправьте /skip чтобы пропустить"
+            )
+            return COOK_TELEGRAM
+
+        context.user_data['new_product']['cook_telegram'] = telegram_username
     
     keyboard = [
         [InlineKeyboardButton("🍔 burger", callback_data="cat_burger")],
@@ -561,87 +638,146 @@ async def product_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def product_ingredients(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Получение ингредиентов"""
-    ingredients_str = update.message.text
-    ingredients_list = [ing.strip() for ing in ingredients_str.split(',')]
-    
-    context.user_data['new_product']['ingredients'] = json.dumps(ingredients_list, ensure_ascii=False)
-    
+    text = update.message.text.strip()
+
+    # Проверка на команду skip
+    if text == '/skip':
+        ingredients_list = []
+        context.user_data['new_product']['ingredients'] = json.dumps([], ensure_ascii=False)
+    else:
+        ingredients_str = text
+        ingredients_list = [ing.strip() for ing in ingredients_str.split(',') if ing.strip()]
+
+        if not ingredients_list:
+            await update.message.reply_text(
+                "❌ Пожалуйста, введите хотя бы один ингредиент\n"
+                "Или отправьте /skip чтобы пропустить"
+            )
+            return INGREDIENTS
+
+        context.user_data['new_product']['ingredients'] = json.dumps(ingredients_list, ensure_ascii=False)
+
     # Формируем превью
     product = context.user_data['new_product']
-    
-    preview = f"""
-📋 <b>Предпросмотр блюда:</b>
+
+    # Отправляем изображение с предпросмотром
+    preview_text = f"""
+📋 <b>ПРЕДПРОСМОТР БЛЮДА</b>
 
 🍽️ <b>Название:</b> {product['name']}
 📝 <b>Описание:</b> {product['description']}
 💰 <b>Цена:</b> {product['price']} AED
-🖼️ <b>Изображение:</b> {product['image'][:50]}...
-👨‍🍳 <b>Повар:</b> @{product['cook_telegram']}
 📂 <b>Категория:</b> {product['category']}
-🥘 <b>Ингредиенты:</b> {', '.join(ingredients_list[:5])}{'...' if len(ingredients_list) > 5 else ''}
-
-Всё верно?
 """
-    
+
+    if product.get('cook_telegram'):
+        preview_text += f"👨‍🍳 <b>Повар:</b> @{product['cook_telegram']}\n"
+
+    if ingredients_list:
+        preview_text += f"🥘 <b>Ингредиенты:</b> {', '.join(ingredients_list[:8])}{'...' if len(ingredients_list) > 8 else ''}\n"
+
+    preview_text += "\n<b>Всё верно? Сохранить блюдо?</b>"
+
     keyboard = [
-        [
-            InlineKeyboardButton("✅ Да, сохранить", callback_data="save_product"),
-            InlineKeyboardButton("❌ Отменить", callback_data="cancel_product")
-        ]
+        [InlineKeyboardButton("✅ Да, сохранить", callback_data="save_product")],
+        [InlineKeyboardButton("❌ Отменить", callback_data="cancel_product")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
-    
-    await update.message.reply_text(preview, reply_markup=reply_markup, parse_mode='HTML')
-    
+
+    # Пытаемся отправить с изображением
+    try:
+        await update.message.reply_photo(
+            photo=product['image'],
+            caption=preview_text,
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+    except Exception:
+        # Если не получилось - отправляем без изображения
+        await update.message.reply_text(
+            preview_text + f"\n\n⚠️ Изображение: {product['image'][:50]}...",
+            reply_markup=reply_markup,
+            parse_mode='HTML'
+        )
+
     return CONFIRM
 
 async def save_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Сохранение блюда в БД"""
     query = update.callback_query
-    await query.answer()
-    
+    await query.answer("💾 Сохраняем блюдо...")
+
     product = context.user_data.get('new_product')
-    
+
     if not product:
-        await query.edit_message_text("❌ Ошибка: данные блюда не найдены")
+        await query.edit_message_caption(
+            caption="❌ <b>Ошибка:</b> данные блюда не найдены\n\n"
+            "Попробуйте добавить блюдо заново через /start",
+            parse_mode='HTML'
+        )
         return ConversationHandler.END
-    
-    # Генерируем ID
-    with get_db() as conn:
-        cursor = conn.cursor()
-        cursor.execute('SELECT MAX(CAST(id AS INTEGER)) as max_id FROM products WHERE id NOT LIKE "%-%"')
-        result = cursor.fetchone()
-        new_id = str((result['max_id'] or 0) + 1)
-        
-        # Сохраняем
-        cursor.execute('''
-            INSERT INTO products (id, name, description, price, image, cook_telegram, category, ingredients)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            new_id,
-            product['name'],
-            product['description'],
-            product['price'],
-            product['image'],
-            product['cook_telegram'],
-            product['category'],
-            product['ingredients']
-        ))
-        conn.commit()
-    
-    await query.edit_message_text(
-        f"✅ <b>Блюдо успешно добавлено!</b>\n\n"
-        f"ID: {new_id}\n"
-        f"Название: {product['name']}\n"
-        f"Цена: {product['price']} AED\n"
-        f"Категория: {product['category']}\n\n"
-        f"Теперь оно доступно в мини-аппе!",
-        parse_mode='HTML'
-    )
-    
-    # Очищаем данные
-    context.user_data.clear()
-    
+
+    try:
+        # Генерируем ID
+        with get_db() as conn:
+            cursor = conn.cursor()
+            cursor.execute('SELECT MAX(CAST(id AS INTEGER)) as max_id FROM products WHERE id NOT LIKE "%-%"')
+            result = cursor.fetchone()
+            new_id = str((result['max_id'] or 0) + 1)
+
+            # Сохраняем
+            cursor.execute('''
+                INSERT INTO products (id, name, description, price, image, cook_telegram, category, ingredients)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                new_id,
+                product['name'],
+                product['description'],
+                product['price'],
+                product['image'],
+                product.get('cook_telegram', ''),
+                product['category'],
+                product['ingredients']
+            ))
+            conn.commit()
+
+        success_message = (
+            f"✅ <b>Блюдо успешно добавлено!</b>\n\n"
+            f"🆔 ID: #{new_id}\n"
+            f"🍽️ Название: {product['name']}\n"
+            f"💰 Цена: {product['price']} AED\n"
+            f"📂 Категория: {product['category']}\n\n"
+            f"🎉 Теперь оно доступно в мини-аппе!\n"
+            f"Пользователи уже могут его заказать."
+        )
+
+        # Пытаемся отредактировать caption, если не получится - отправляем новое сообщение
+        try:
+            await query.edit_message_caption(
+                caption=success_message,
+                parse_mode='HTML'
+            )
+        except Exception:
+            await query.message.reply_text(
+                success_message,
+                parse_mode='HTML'
+            )
+
+    except Exception as e:
+        error_message = (
+            f"❌ <b>Ошибка при сохранении:</b>\n\n"
+            f"{str(e)}\n\n"
+            f"Попробуйте еще раз через /start"
+        )
+        try:
+            await query.edit_message_caption(caption=error_message, parse_mode='HTML')
+        except Exception:
+            await query.message.reply_text(error_message, parse_mode='HTML')
+
+    finally:
+        # Очищаем данные
+        context.user_data.clear()
+
     return ConversationHandler.END
 
 async def cancel_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
