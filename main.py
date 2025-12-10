@@ -500,10 +500,10 @@ async def get_app():
         <link rel="preconnect" href="https://telegram.org">
         <link rel="preconnect" href="https://unpkg.com">
 
-        <!-- Defer скрипты для быстрой загрузки -->
-        <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
-        <script src="https://unpkg.com/vue@3/dist/vue.global.js" defer></script>
-        <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js" defer></script>
+        <!-- Скрипты для работы приложения -->
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+        <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
         <style>
     * {
         box-sizing: border-box;
@@ -646,9 +646,7 @@ async def get_app():
             speed="1"
             style="width: 120px; height: 120px; margin: 0 auto;"
             loop
-            mode="normal"
-            :renderer="'svg'"
-            :class="'lottie-animation'">
+            autoplay>
         </lottie-player>
 
         <button class="category-btn" @click="goToCategory(cat)">
@@ -660,7 +658,7 @@ async def get_app():
         </div>
 
         <script>
-        const { createApp, ref, onMounted } = Vue;
+        const { createApp, ref } = Vue;
         createApp({
             setup() {
                 const searchQuery = ref('');
@@ -676,33 +674,6 @@ async def get_app():
                 const goToCategory = (cat) => {
                     window.location.href = `/app/${cat.name}?q=${encodeURIComponent(searchQuery.value)}`;
                 };
-
-                onMounted(() => {
-                    // Intersection Observer для отложенной загрузки анимаций
-                    const options = {
-                        root: null,
-                        rootMargin: '50px',
-                        threshold: 0.1
-                    };
-
-                    const observer = new IntersectionObserver((entries) => {
-                        entries.forEach(entry => {
-                            if (entry.isIntersecting) {
-                                const player = entry.target;
-                                // Запускаем анимацию только когда элемент виден
-                                if (!player.hasAttribute('data-loaded')) {
-                                    player.setAttribute('data-loaded', 'true');
-                                    player.play();
-                                }
-                            }
-                        });
-                    }, options);
-
-                    // Наблюдаем за всеми Lottie анимациями
-                    document.querySelectorAll('lottie-player').forEach(player => {
-                        observer.observe(player);
-                    });
-                });
 
                 return { searchQuery, categories, goToCategory };
             }
@@ -741,9 +712,9 @@ async def get_app_category(category: str):
         <link rel="preconnect" href="https://images.unsplash.com">
         <link rel="dns-prefetch" href="https://images.unsplash.com">
 
-        <!-- Defer скрипты для быстрой загрузки -->
-        <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
-        <script src="https://unpkg.com/vue@3/dist/vue.global.js" defer></script>
+        <!-- Скрипты для работы приложения -->
+        <script src="https://telegram.org/js/telegram-web-app.js"></script>
+        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
         <style>
             * {{
                 box-sizing: border-box;
