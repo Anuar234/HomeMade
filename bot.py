@@ -635,7 +635,7 @@ async def product_ingredients(update: Update, context: ContextTypes.DEFAULT_TYPE
     preview_text += "\n<b>Всё верно? Сохранить блюдо?</b>"
 
     keyboard = [
-        [InlineKeyboardButton("✅ Да, сохранить", callback_data="save_product")],
+        [InlineKeyboardButton("✅ Да, сохранить", callback_data="saveproduct")],
         [InlineKeyboardButton("❌ Отменить", callback_data="cancel_product")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -658,87 +658,65 @@ async def product_ingredients(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     return CONFIRM
 
-async def save_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Сохранение блюда в БД"""
+async def saveproduct(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
-    await query.answer("💾 Сохраняем блюдо...")
-
+    await query.answer()
+    
     product = context.user_data.get('new_product')
-
     if not product:
         await query.edit_message_caption(
-            caption="❌ <b>Ошибка:</b> данные блюда не найдены\n\n"
-            "Попробуйте добавить блюдо заново через /start",
+            caption="❌ *Ошибка*\n\n/start",
             parse_mode='HTML'
         )
         return ConversationHandler.END
-
+    
     try:
-        # Генерируем ID
-        with get_db() as conn:
-            cursor = conn.cursor()
-            # PostgreSQL and SQLite compatible query
-            if db.use_postgres:
-                cursor.execute("SELECT MAX(CAST(id AS INTEGER)) as max_id FROM products WHERE id NOT LIKE %s", ('%-%',))
-            else:
-                cursor.execute('SELECT MAX(CAST(id AS INTEGER)) as max_id FROM products WHERE id NOT LIKE "%-%"')
-            result = cursor.fetchone()
-            new_id = str((result['max_id'] or 0) + 1)
-
-            # Сохраняем
-            cursor.execute(fix_query('''
-                INSERT INTO products (id, name, description, price, image, cook_telegram, category, ingredients)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            '''), (
-                new_id,
-                product['name'],
-                product['description'],
-                product['price'],
-                product['image'],
-                product.get('cook_telegram', ''),
-                product['category'],
-                product['ingredients']
-            ))
-            conn.commit()
-
-        success_message = (
-            f"✅ <b>Блюдо успешно добавлено!</b>\n\n"
-            f"🆔 ID: #{new_id}\n"
-            f"🍽️ Название: {product['name']}\n"
-            f"💰 Цена: {product['price']} AED\n"
-            f"📂 Категория: {product['category']}\n\n"
-            f"🎉 Теперь оно доступно в мини-аппе!\n"
-            f"Пользователи уже могут его заказать."
+        # Используем функцию из database.py
+        from database import add_product
+        import json
+        
+        # Извлекаем данные
+        ingredients_str = product.get('ingredients', '[]')
+        ingredients_list = json.loads(ingredients_str) if isinstance(ingredients_str, str) else ingredients_str
+        
+        # Добавляем продукт через адаптер
+        new_id = add_product(
+            name=product['name'],
+            description=product['description'],
+            price=product['price'],
+            image=product['image'],
+            category=product['category'],
+            ingredients=product['ingredients'],
+            cook_telegram=product.get('cook_telegram', '')
         )
+        
+        success_message = f"""✅ *Продукт добавлен!*
 
-        # Пытаемся отредактировать caption, если не получится - отправляем новое сообщение
+📦 ID: {new_id}
+📝 {product['name']}
+💰 {product['price']} AED
+🏷 {product['category']}
+
+⚡ Изменения сохранены в базе данных!
+➡️ Проверьте мини-приложение.
+"""
+        
         try:
-            await query.edit_message_caption(
-                caption=success_message,
-                parse_mode='HTML'
-            )
+            await query.edit_message_caption(caption=success_message, parse_mode='HTML')
         except Exception:
-            await query.message.reply_text(
-                success_message,
-                parse_mode='HTML'
-            )
-
+            await query.message.reply_text(success_message, parse_mode='HTML')
+            
     except Exception as e:
-        error_message = (
-            f"❌ <b>Ошибка при сохранении:</b>\n\n"
-            f"{str(e)}\n\n"
-            f"Попробуйте еще раз через /start"
-        )
+        error_message = f"❌ *Ошибка*\n\n{str(e)}\n\n/start"
         try:
             await query.edit_message_caption(caption=error_message, parse_mode='HTML')
         except Exception:
             await query.message.reply_text(error_message, parse_mode='HTML')
-
     finally:
-        # Очищаем данные
         context.user_data.clear()
-
+    
     return ConversationHandler.END
+
 
 async def cancel_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Отмена добавления"""
@@ -1170,10 +1148,11 @@ def create_application():
     application = Application.builder().token(BOT_TOKEN).build()
     
     # Conversation handler для добавления продукта
+    # Conversation handler для добавления продукта
     add_product_handler = ConversationHandler(
         entry_points=[
-            CallbackQueryHandler(add_product_start, pattern="^add_product$"),
-            CommandHandler("addproduct", add_product_start)
+            CallbackQueryHandler(add_product_start, pattern='addproduct'),
+            CommandHandler('addproduct', add_product_start)
         ],
         states={
             NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_name)],
@@ -1181,18 +1160,19 @@ def create_application():
             PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_price)],
             IMAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_image)],
             COOK_TELEGRAM: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_cook_telegram)],
-            CATEGORY: [CallbackQueryHandler(product_category, pattern="^cat_")],
+            CATEGORY: [CallbackQueryHandler(product_category, pattern='^cat')],
             INGREDIENTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_ingredients)],
             CONFIRM: [
-                CallbackQueryHandler(save_product, pattern="^save_product$"),
-                CallbackQueryHandler(cancel_product, pattern="^cancel_product$")
-            ],
+                CallbackQueryHandler(saveproduct, pattern='saveproduct'),  # ← Здесь должно быть saveproduct
+                CallbackQueryHandler(cancel_product, pattern='cancelproduct')
+            ]
         },
         fallbacks=[
-            CommandHandler("cancel", cancel_product),
-            CallbackQueryHandler(cancel_product, pattern="^cancel_product$")
-        ],
+            CommandHandler('cancel', cancel_product),
+            CallbackQueryHandler(cancel_product, pattern='cancelproduct')
+        ]
     )
+
     
     # Регистрируем обработчики
     application.add_handler(add_product_handler)

@@ -118,6 +118,9 @@ if __name__ == "__main__":
 
     print(f"Starting FastAPI on 0.0.0.0:{PORT}")
     print("=" * 50)
+    print(f"DATABASE_URL: {os.getenv('DATABASE_URL', 'Not set')[:30]}...")
+    print(f"Using: {'PostgreSQL' if os.getenv('DATABASE_URL') else 'SQLite'}")
+
     
     # Запускаем FastAPI (бот запустится автоматически через lifespan)
     uvicorn.run(

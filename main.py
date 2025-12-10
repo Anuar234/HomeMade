@@ -1351,31 +1351,30 @@ async def get_app_category(category: str):
 
 @app.get("/api/products", response_model=List[Product])
 async def get_products(category: Optional[str] = None):
-    """Получить все продукты или по категории из БД"""
+    print(f"🔍 API request: category={category}")
+    
     with get_db() as conn:
         cursor = conn.cursor()
-
+        
         if category:
-            cursor.execute(
-                fix_query('SELECT * FROM products WHERE LOWER(category) = LOWER(?)'),
-                (category,)
-            )
+            cursor.execute(fix_query("SELECT * FROM products WHERE LOWER(category) = LOWER(?)"), (category,))
         else:
-            cursor.execute('SELECT * FROM products')
-
+            cursor.execute("SELECT * FROM products")
+        
         rows = cursor.fetchall()
-
+        print(f"📊 Found {len(rows)} products in database")  # Логирование
+        
         products = []
         for row in rows:
             product = dict(row)
-            # Парсим JSON ingredients
             if product['ingredients']:
                 product['ingredients'] = json.loads(product['ingredients'])
             else:
                 product['ingredients'] = []
             products.append(product)
+    
+    return products
 
-        return products
 
 
 @app.get("/api/products/{product_id}", response_model=Product)

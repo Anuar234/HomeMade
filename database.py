@@ -262,26 +262,38 @@ def get_products_by_category(category: str):
 def add_product(name: str, description: str, price: float, image: str,
                 category: str, ingredients: str, cook_telegram: str = ""):
     """Добавить новый продукт"""
+    import uuid
+    
+    # Генерируем короткий уникальный ID
+    product_id = str(uuid.uuid4())[:8]
+    
     placeholder = db.get_placeholder()
-
-    if db.use_postgres:
-        query = f"""
-        INSERT INTO products (name, description, price, image, category, ingredients, cook_telegram)
-        VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
-        RETURNING id
-        """
-        with db.get_connection() as conn:
-            cursor = conn.cursor()
-            cursor.execute(query, (name, description, price, image, category, ingredients, cook_telegram))
-            new_id = cursor.fetchone()[0]
-            conn.commit()
-            return new_id
-    else:
-        query = f"""
-        INSERT INTO products (name, description, price, image, category, ingredients, cook_telegram)
-        VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
-        """
-        return db.execute_query(query, (name, description, price, image, category, ingredients, cook_telegram))
+    
+    # Формируем query
+    query = f"""
+    INSERT INTO products (id, name, description, price, image, category, ingredients, cook_telegram)
+    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+    """
+    
+    # Собираем все параметры в tuple
+    params = (
+        product_id, 
+        name, 
+        description, 
+        price, 
+        image, 
+        category, 
+        ingredients, 
+        cook_telegram
+    )
+    
+    # Выполняем запрос
+    db.execute_query(query, params)
+    
+    # Логирование для отладки
+    print(f"✅ Product added to DB: ID={product_id}, Name={name}, Category={category}")
+    
+    return product_id
 
 
 def delete_product(product_id: int):
