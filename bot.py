@@ -24,7 +24,7 @@ try:
     BOT_TOKEN = os.getenv("BOT_TOKEN")
     ADMIN_IDS_STR = os.getenv("ADMIN_IDS")
     ADMIN_IDS = [int(id.strip()) for id in ADMIN_IDS_STR.split(",") if id.strip()]
-    DATABASE = os.getenv("DATABASE", "homefood.db")
+    DATABASE = "PostgreSQL" if os.getenv("DATABASE_URL") else "homefood.db"
 except:
     BOT_TOKEN = "YOUR_BOT_TOKEN_HERE"
     ADMIN_IDS = [123456789]

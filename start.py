@@ -92,6 +92,61 @@ def start_bot_thread():
     print("Bot thread started")
     return bot_thread
 
+def run_bot_in_thread():
+    """Запуск бота с созданием нового event loop для потока"""
+    if not BOT_TOKEN:
+        print("Skipping bot - no BOT_TOKEN")
+        return
+
+    try:
+        print("Starting Telegram Bot thread...")
+        
+        # Создаем новый event loop для этого потока
+        loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
+        
+        # Импортируем бота
+        import bot
+        from telegram import Update, Bot
+
+        print(f"Database: {'PostgreSQL' if bot.db.use_postgres else 'SQLite'}")
+        print(f"Admins: {bot.ADMIN_IDS}")
+
+        # Создаем приложение
+        application = bot.create_application()
+
+        if not application:
+            print("Failed to create bot application")
+            return
+
+        print("Bot started and listening for updates...")
+
+        # Запускаем бота асинхронно
+        async def run_bot_async():
+            # Удаляем webhook перед запуском polling
+            try:
+                await application.bot.delete_webhook(drop_pending_updates=True)
+                print("✅ Webhook cleared, starting polling...")
+            except Exception as e:
+                print(f"⚠️ Could not clear webhook: {e}")
+            
+            async with application:
+                await application.start()
+                await application.updater.start_polling(
+                    allowed_updates=Update.ALL_TYPES,
+                    drop_pending_updates=True
+                )
+                # Держим бота живым
+                await asyncio.Event().wait()
+
+        # Запускаем
+        loop.run_until_complete(run_bot_async())
+
+    except Exception as e:
+        print(f"Bot error: {e}")
+        import traceback
+        traceback.print_exc()
+
 
 @asynccontextmanager
 async def lifespan(app):
