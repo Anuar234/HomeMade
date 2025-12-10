@@ -13,7 +13,18 @@ from contextlib import contextmanager
 
 app = FastAPI(title="Home Food Abu Dhabi!")
 
-app.mount("/static", StaticFiles(directory="static"), name="static")
+# Custom StaticFiles with cache headers
+class CachedStaticFiles(StaticFiles):
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+    async def get_response(self, path, scope):
+        response = await super().get_response(path, scope)
+        # Cache static files for 1 year
+        response.headers["Cache-Control"] = "public, max-age=31536000, immutable"
+        return response
+
+app.mount("/static", CachedStaticFiles(directory="static"), name="static")
 
 # CORS для работы с Telegram Mini App
 app.add_middleware(
@@ -106,28 +117,28 @@ def add_missing_columns_legacy():
             cursor.execute("SELECT customer_telegram FROM orders LIMIT 1")
         except sqlite3.OperationalError:
             cursor.execute("ALTER TABLE orders ADD COLUMN customer_telegram TEXT")
-            print("✅ Добавлена колонка customer_telegram в таблицу orders")
+            print("Added column customer_telegram to orders table")
 
         # Добавляем user_telegram_id в orders
         try:
             cursor.execute("SELECT user_telegram_id FROM orders LIMIT 1")
         except sqlite3.OperationalError:
             cursor.execute("ALTER TABLE orders ADD COLUMN user_telegram_id INTEGER")
-            print("✅ Добавлена колонка user_telegram_id в таблицу orders")
+            print("Added column user_telegram_id to orders table")
 
         # Добавляем cook_telegram в products
         try:
             cursor.execute("SELECT cook_telegram FROM products LIMIT 1")
         except sqlite3.OperationalError:
             cursor.execute("ALTER TABLE products ADD COLUMN cook_telegram TEXT")
-            print("✅ Добавлена колонка cook_telegram в таблицу products")
+            print("Added column cook_telegram to products table")
 
         # Добавляем cook_telegram в order_items
         try:
             cursor.execute("SELECT cook_telegram FROM order_items LIMIT 1")
         except sqlite3.OperationalError:
             cursor.execute("ALTER TABLE order_items ADD COLUMN cook_telegram TEXT")
-            print("✅ Добавлена колонка cook_telegram в таблицу order_items")
+            print("Added column cook_telegram to order_items table")
 
         conn.commit()
 
@@ -139,7 +150,7 @@ def seed_products(conn):
             "name": "Домашние пельмени",
             "description": "Сочные пельмени с говядиной и свининой, как в России",
             "price": 25.0,
-            "image": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=300",
+            "image": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=150&q=80&fm=webp&fit=crop",
             "cook_name": "Анна Петрова",
             "cook_phone": "+971501234567",
             "category": "pelmeni",
@@ -150,7 +161,7 @@ def seed_products(conn):
             "name": "Узбекский плов",
             "description": "Настоящий узбекский плов с бараниной и специями",
             "price": 30.0,
-            "image": "https://images.unsplash.com/photo-1596040033229-a0b3b7f5c777?w=300",
+            "image": "https://images.unsplash.com/photo-1596040033229-a0b3b7f5c777?w=150&q=80&fm=webp&fit=crop",
             "cook_name": "Фарход Алиев",
             "cook_phone": "+971507654321",
             "category": "plov",
@@ -161,7 +172,7 @@ def seed_products(conn):
             "name": "Домашний борщ",
             "description": "Украинский борщ с говядиной и сметаной",
             "price": 18.0,
-            "image": "https://images.unsplash.com/photo-1571064247530-4146bc1a081b?w=300",
+            "image": "https://images.unsplash.com/photo-1571064247530-4146bc1a081b?w=150&q=80&fm=webp&fit=crop",
             "cook_name": "Оксана Коваль",
             "cook_phone": "+971509876543",
             "category": "soup",
@@ -172,7 +183,7 @@ def seed_products(conn):
             "name": "Хачапури по-аджарски",
             "description": "Грузинский хачапури с сыром и яйцом",
             "price": 22.0,
-            "image": "https://images.unsplash.com/photo-1627662235973-4d265e175fc1?w=300",
+            "image": "https://images.unsplash.com/photo-1627662235973-4d265e175fc1?w=150&q=80&fm=webp&fit=crop",
             "cook_name": "Нино Джавахишвили",
             "cook_phone": "+971508765432",
             "category": "khachapuri",
@@ -183,7 +194,7 @@ def seed_products(conn):
             "name": "Домашний бургер",
             "description": "Сочный бургер с говяжьей котлетой и свежими овощами",
             "price": 35.0,
-            "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=300",
+            "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=150&q=80&fm=webp&fit=crop",
             "cook_name": "Михаил Сидоров",
             "cook_phone": "+971501111111",
             "category": "burger",
@@ -194,7 +205,7 @@ def seed_products(conn):
             "name": "Пицца Маргарита",
             "description": "Классическая итальянская пицца с моцареллой и базиликом",
             "price": 28.0,
-            "image": "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=300",
+            "image": "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=150&q=80&fm=webp&fit=crop",
             "cook_name": "Джованни Росси",
             "cook_phone": "+971502222222",
             "category": "pizza",
@@ -484,16 +495,40 @@ async def get_app():
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>Home Food Abu Dhabi</title>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
-        <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js"></script>
+
+        <!-- Preconnect для быстрой загрузки -->
+        <link rel="preconnect" href="https://telegram.org">
+        <link rel="preconnect" href="https://unpkg.com">
+
+        <!-- Defer скрипты для быстрой загрузки -->
+        <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
+        <script src="https://unpkg.com/vue@3/dist/vue.global.js" defer></script>
+        <script src="https://unpkg.com/@lottiefiles/lottie-player@latest/dist/lottie-player.js" defer></script>
         <style>
+    * {
+        box-sizing: border-box;
+    }
+
     body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
         padding: 12px;
         background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         margin: 0;
         min-height: 100vh;
+        -webkit-font-smoothing: antialiased;
+        -moz-osx-font-smoothing: grayscale;
+    }
+
+    /* Плавная прокрутка */
+    html {
+        scroll-behavior: smooth;
+    }
+
+    /* Аппаратное ускорение для анимаций */
+    .icon-card, .category-btn {
+        will-change: transform;
+        transform: translateZ(0);
+        backface-visibility: hidden;
     }
 
     .header {
@@ -600,9 +635,9 @@ async def get_app():
             </div>
 
             <div class="icons-grid">
-    <div 
-        v-for="cat in categories" 
-        :key="cat.name" 
+    <div
+        v-for="cat in categories"
+        :key="cat.name"
         class="icon-card"
     >
         <lottie-player
@@ -610,7 +645,10 @@ async def get_app():
             background="transparent"
             speed="1"
             style="width: 120px; height: 120px; margin: 0 auto;"
-            loop autoplay>
+            loop
+            mode="normal"
+            :renderer="'svg'"
+            :class="'lottie-animation'">
         </lottie-player>
 
         <button class="category-btn" @click="goToCategory(cat)">
@@ -622,7 +660,7 @@ async def get_app():
         </div>
 
         <script>
-        const { createApp, ref } = Vue;
+        const { createApp, ref, onMounted } = Vue;
         createApp({
             setup() {
                 const searchQuery = ref('');
@@ -638,6 +676,33 @@ async def get_app():
                 const goToCategory = (cat) => {
                     window.location.href = `/app/${cat.name}?q=${encodeURIComponent(searchQuery.value)}`;
                 };
+
+                onMounted(() => {
+                    // Intersection Observer для отложенной загрузки анимаций
+                    const options = {
+                        root: null,
+                        rootMargin: '50px',
+                        threshold: 0.1
+                    };
+
+                    const observer = new IntersectionObserver((entries) => {
+                        entries.forEach(entry => {
+                            if (entry.isIntersecting) {
+                                const player = entry.target;
+                                // Запускаем анимацию только когда элемент виден
+                                if (!player.hasAttribute('data-loaded')) {
+                                    player.setAttribute('data-loaded', 'true');
+                                    player.play();
+                                }
+                            }
+                        });
+                    }, options);
+
+                    // Наблюдаем за всеми Lottie анимациями
+                    document.querySelectorAll('lottie-player').forEach(player => {
+                        observer.observe(player);
+                    });
+                });
 
                 return { searchQuery, categories, goToCategory };
             }
@@ -669,15 +734,41 @@ async def get_app_category(category: str):
         <meta charset="UTF-8">
         <meta name="viewport" content="width=device-width, initial-scale=1.0">
         <title>{category_display} - Home Food Abu Dhabi</title>
-        <script src="https://telegram.org/js/telegram-web-app.js"></script>
-        <script src="https://unpkg.com/vue@3/dist/vue.global.js"></script>
+
+        <!-- Preconnect для быстрой загрузки -->
+        <link rel="preconnect" href="https://telegram.org">
+        <link rel="preconnect" href="https://unpkg.com">
+        <link rel="preconnect" href="https://images.unsplash.com">
+        <link rel="dns-prefetch" href="https://images.unsplash.com">
+
+        <!-- Defer скрипты для быстрой загрузки -->
+        <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
+        <script src="https://unpkg.com/vue@3/dist/vue.global.js" defer></script>
         <style>
-            body {{ 
-                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; 
+            * {{
+                box-sizing: border-box;
+            }}
+
+            body {{
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
                 padding: 0;
                 margin: 0;
                 background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
                 min-height: 100vh;
+                -webkit-font-smoothing: antialiased;
+                -moz-osx-font-smoothing: grayscale;
+            }}
+
+            /* Плавная прокрутка */
+            html {{
+                scroll-behavior: smooth;
+            }}
+
+            /* Аппаратное ускорение для анимаций */
+            .product-card, .add-to-cart-btn, .cart-summary {{
+                will-change: transform;
+                transform: translateZ(0);
+                backface-visibility: hidden;
             }}
             
             .header {{
@@ -761,13 +852,25 @@ async def get_app_category(category: str):
                 margin-bottom: 15px;
             }}
             
-            .product-img {{ 
+            .product-img {{
                 width: 100px;
                 height: 80px;
                 object-fit: cover;
                 border-radius: 12px;
                 box-shadow: 0 4px 15px rgba(0,0,0,0.1);
                 flex-shrink: 0;
+                background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%);
+                background-size: 200% 100%;
+                animation: loading 1.5s infinite;
+            }}
+
+            @keyframes loading {{
+                0% {{ background-position: 200% 0; }}
+                100% {{ background-position: -200% 0; }}
+            }}
+
+            .product-img[src] {{
+                animation: none;
             }}
             
             .product-info {{
@@ -1094,7 +1197,7 @@ async def get_app_category(category: str):
                 
                 <div v-for="p in products" :key="p.id" class="product-card">
                     <div class="product-header">
-                        <img :src="p.image" class="product-img" :alt="p.name" />
+                        <img :src="p.image" class="product-img" :alt="p.name" loading="lazy" />
                         <div class="product-info">
                             <h3 class="product-name">{{{{ p.name }}}}</h3>
                             <p class="product-description">{{{{ p.description }}}}</p>

@@ -10,13 +10,12 @@ web: python start.py
 """
 
 import os
-import sys
 import asyncio
 import threading
 from contextlib import asynccontextmanager
 
 print("=" * 50)
-print("🍽️  Home Food Abu Dhabi - Starting...")
+print("Home Food Abu Dhabi - Starting...")
 print("=" * 50)
 
 # Проверка переменных окружения
@@ -24,24 +23,24 @@ BOT_TOKEN = os.getenv("BOT_TOKEN")
 PORT = int(os.getenv("PORT", 8000))
 
 if not BOT_TOKEN:
-    print("⚠️  WARNING: BOT_TOKEN not set! Bot will not work.")
-    print("   Set it in Railway environment variables")
+    print("WARNING: BOT_TOKEN not set! Bot will not work.")
+    print("Set it in Railway environment variables")
 else:
-    print(f"✅ BOT_TOKEN: {BOT_TOKEN[:10]}...")
+    print(f"BOT_TOKEN: {BOT_TOKEN[:10]}...")
 
-print(f"✅ PORT: {PORT}")
-print(f"✅ ADMIN_IDS: {os.getenv('ADMIN_IDS', 'Not set')}")
+print(f"PORT: {PORT}")
+print(f"ADMIN_IDS: {os.getenv('ADMIN_IDS', 'Not set')}")
 print("=" * 50)
 
 
 def run_bot_in_thread():
     """Запуск бота с созданием нового event loop для потока"""
     if not BOT_TOKEN:
-        print("❌ Skipping bot - no BOT_TOKEN")
+        print("Skipping bot - no BOT_TOKEN")
         return
-    
+
     try:
-        print("🤖 Starting Telegram Bot thread...")
+        print("Starting Telegram Bot thread...")
         
         # КРИТИЧЕСКИ ВАЖНО: создаем новый event loop для этого потока
         loop = asyncio.new_event_loop()
@@ -50,18 +49,19 @@ def run_bot_in_thread():
         # Импортируем бота
         import bot
         from telegram import Update
-        
-        print("📊 База данных: homefood.db")
-        print(f"👥 Админы: {bot.ADMIN_IDS}")
-        
+
+
+        print("Database: homefood.db")
+        print(f"Admins: {bot.ADMIN_IDS}")
+
         # Создаем приложение через нашу функцию
         application = bot.create_application()
-        
+
         if not application:
-            print("❌ Не удалось создать bot application")
+            print("Failed to create bot application")
             return
-        
-        print("✅ Бот запущен и слушает обновления...")
+
+        print("Bot started and listening for updates...")
         
         # Запускаем бота асинхронно в текущем event loop
         async def run_bot_async():
@@ -73,9 +73,10 @@ def run_bot_in_thread():
         
         # Запускаем
         loop.run_until_complete(run_bot_async())
-        
+
+
     except Exception as e:
-        print(f"❌ Bot error: {e}")
+        print(f"Bot error: {e}")
         import traceback
         traceback.print_exc()
 
@@ -88,21 +89,21 @@ def start_bot_thread():
         name="TelegramBotThread"
     )
     bot_thread.start()
-    print("✅ Bot thread started")
+    print("Bot thread started")
     return bot_thread
 
 
 @asynccontextmanager
 async def lifespan(app):
     """Lifespan events для FastAPI - запускаем бота при старте"""
-    print("🚀 FastAPI starting up...")
-    
+    print("FastAPI starting up...")
+
     # Запускаем бота в отдельном потоке
-    bot_thread = start_bot_thread()
-    
+    start_bot_thread()
+
     yield  # Приложение работает
-    
-    print("🛑 FastAPI shutting down...")
+
+    print("FastAPI shutting down...")
 
 
 # Импортируем FastAPI app и добавляем lifespan
@@ -114,8 +115,8 @@ fastapi_app.router.lifespan_context = lifespan
 
 if __name__ == "__main__":
     import uvicorn
-    
-    print(f"🌐 Starting FastAPI on 0.0.0.0:{PORT}")
+
+    print(f"Starting FastAPI on 0.0.0.0:{PORT}")
     print("=" * 50)
     
     # Запускаем FastAPI (бот запустится автоматически через lifespan)
