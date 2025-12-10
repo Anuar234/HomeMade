@@ -34,9 +34,6 @@ except:
 (NAME, DESCRIPTION, PRICE, IMAGE, COOK_TELEGRAM,
  CATEGORY, INGREDIENTS, CONFIRM) = range(8)
 
-# Global variable to store telegram application for webhook
-telegram_application = None
-
 # === DATABASE ===
 # Compatibility wrapper for existing code
 get_db = db.get_connection
@@ -1166,16 +1163,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def create_application():
     """Создать и настроить application без запуска"""
-    global telegram_application
-
     if BOT_TOKEN == "YOUR_BOT_TOKEN_HERE":
         print("❌ ОШИБКА: Установите BOT_TOKEN!")
         return None
 
     application = Application.builder().token(BOT_TOKEN).build()
-
-    # Сохраняем в глобальную переменную для webhook
-    telegram_application = application
     
     # Conversation handler для добавления продукта
     add_product_handler = ConversationHandler(
