@@ -7,9 +7,11 @@ from typing import List, Optional
 import json
 import uuid
 import os
-import sqlite3
 from datetime import datetime
 from contextlib import contextmanager
+
+# Import database adapter
+from database import db
 
 app = FastAPI(title="Home Food Abu Dhabi!")
 
@@ -36,203 +38,18 @@ app.add_middleware(
 )
 
 # === DATABASE SETUP ===
-DATABASE = "homefood.db"
+# Database initialization is handled by database.py adapter
+# It automatically detects SQLite (local) or PostgreSQL (Railway)
+print(f"Database initialized: {'PostgreSQL' if db.use_postgres else 'SQLite'}")
 
-@contextmanager
-def get_db():
-    """Контекстный менеджер для работы с БД"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-    finally:
-        conn.close()
+# Compatibility wrapper for existing code
+get_db = db.get_connection
 
-def init_db():
-    """Инициализация базы данных"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-        
-        # Таблица продуктов
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS products (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                description TEXT,
-                price REAL NOT NULL,
-                image TEXT,
-                cook_name TEXT,
-                cook_phone TEXT,
-                category TEXT,
-                ingredients TEXT
-            )
-        ''')
-        
-        # Таблица заказов
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS orders (
-                id TEXT PRIMARY KEY,
-                customer_name TEXT NOT NULL,
-                customer_phone TEXT NOT NULL,
-                customer_address TEXT,
-                total_amount REAL NOT NULL,
-                status TEXT DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-        
-        # Таблица элементов заказа
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS order_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id TEXT NOT NULL,
-                product_id TEXT NOT NULL,
-                product_name TEXT,
-                quantity INTEGER NOT NULL,
-                price REAL NOT NULL,
-                cook_name TEXT,
-                cook_phone TEXT,
-                FOREIGN KEY (order_id) REFERENCES orders (id),
-                FOREIGN KEY (product_id) REFERENCES products (id)
-            )
-        ''')
-        
-        conn.commit()
-
-        # Добавляем недостающие колонки
-        add_missing_columns_legacy()
-
-        # Заполняем начальными данными, если таблица пустая
-        cursor.execute('SELECT COUNT(*) as count FROM products')
-        if cursor.fetchone()['count'] == 0:
-            seed_products(conn)
-
-def add_missing_columns_legacy():
-    """Добавляет недостающие колонки в существующую БД (для main.py)"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-
-        # Добавляем customer_telegram в orders
-        try:
-            cursor.execute("SELECT customer_telegram FROM orders LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute("ALTER TABLE orders ADD COLUMN customer_telegram TEXT")
-            print("Added column customer_telegram to orders table")
-
-        # Добавляем user_telegram_id в orders
-        try:
-            cursor.execute("SELECT user_telegram_id FROM orders LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute("ALTER TABLE orders ADD COLUMN user_telegram_id INTEGER")
-            print("Added column user_telegram_id to orders table")
-
-        # Добавляем cook_telegram в products
-        try:
-            cursor.execute("SELECT cook_telegram FROM products LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute("ALTER TABLE products ADD COLUMN cook_telegram TEXT")
-            print("Added column cook_telegram to products table")
-
-        # Добавляем cook_telegram в order_items
-        try:
-            cursor.execute("SELECT cook_telegram FROM order_items LIMIT 1")
-        except sqlite3.OperationalError:
-            cursor.execute("ALTER TABLE order_items ADD COLUMN cook_telegram TEXT")
-            print("Added column cook_telegram to order_items table")
-
-        conn.commit()
-
-def seed_products(conn):
-    """Заполнение БД начальными данными"""
-    products = [
-        {
-            "id": "1",
-            "name": "Домашние пельмени",
-            "description": "Сочные пельмени с говядиной и свининой, как в России",
-            "price": 25.0,
-            "image": "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=150&q=80&fm=webp&fit=crop",
-            "cook_name": "Анна Петрова",
-            "cook_phone": "+971501234567",
-            "category": "pelmeni",
-            "ingredients": '["Мука", "Яйцо", "Говядина", "Свинина", "Лук", "Соль", "Перец"]'
-        },
-        {
-            "id": "2", 
-            "name": "Узбекский плов",
-            "description": "Настоящий узбекский плов с бараниной и специями",
-            "price": 30.0,
-            "image": "https://images.unsplash.com/photo-1596040033229-a0b3b7f5c777?w=150&q=80&fm=webp&fit=crop",
-            "cook_name": "Фарход Алиев",
-            "cook_phone": "+971507654321",
-            "category": "plov",
-            "ingredients": '["Рис", "Баранина", "Морковь", "Лук", "Чеснок", "Зира", "Масло"]'
-        },
-        {
-            "id": "3",
-            "name": "Домашний борщ",
-            "description": "Украинский борщ с говядиной и сметаной",
-            "price": 18.0,
-            "image": "https://images.unsplash.com/photo-1571064247530-4146bc1a081b?w=150&q=80&fm=webp&fit=crop",
-            "cook_name": "Оксана Коваль",
-            "cook_phone": "+971509876543",
-            "category": "soup",
-            "ingredients": '["Свекла", "Говядина", "Капуста", "Картофель", "Морковь", "Лук", "Сметана"]'
-        },
-        {
-            "id": "4",
-            "name": "Хачапури по-аджарски",
-            "description": "Грузинский хачапури с сыром и яйцом",
-            "price": 22.0,
-            "image": "https://images.unsplash.com/photo-1627662235973-4d265e175fc1?w=150&q=80&fm=webp&fit=crop",
-            "cook_name": "Нино Джавахишвили",
-            "cook_phone": "+971508765432",
-            "category": "khachapuri",
-            "ingredients": '["Мука", "Сыр", "Яйцо", "Молоко", "Масло"]'
-        },
-        {
-            "id": "5",
-            "name": "Домашний бургер",
-            "description": "Сочный бургер с говяжьей котлетой и свежими овощами",
-            "price": 35.0,
-            "image": "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=150&q=80&fm=webp&fit=crop",
-            "cook_name": "Михаил Сидоров",
-            "cook_phone": "+971501111111",
-            "category": "burger",
-            "ingredients": '["Булочка", "Говядина", "Сыр", "Салат", "Помидор", "Лук", "Соус"]'
-        },
-        {
-            "id": "6",
-            "name": "Пицца Маргарита",
-            "description": "Классическая итальянская пицца с моцареллой и базиликом",
-            "price": 28.0,
-            "image": "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=150&q=80&fm=webp&fit=crop",
-            "cook_name": "Джованни Росси",
-            "cook_phone": "+971502222222",
-            "category": "pizza",
-            "ingredients": '["Тесто", "Томатный соус", "Моцарелла", "Базилик", "Оливковое масло"]'
-        }
-    ]
-    
-    cursor = conn.cursor()
-    for product in products:
-        cursor.execute('''
-            INSERT INTO products (id, name, description, price, image, cook_name, cook_phone, category, ingredients)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            product['id'],
-            product['name'],
-            product['description'],
-            product['price'],
-            product['image'],
-            product['cook_name'],
-            product['cook_phone'],
-            product['category'],
-            product['ingredients']
-        ))
-    conn.commit()
-
-# Инициализируем БД при старте
-init_db()
+def fix_query(query: str) -> str:
+    """Convert ? placeholders to %s for PostgreSQL"""
+    if db.use_postgres:
+        return query.replace('?', '%s')
+    return query
 
 # === TELEGRAM NOTIFICATIONS ===
 async def send_telegram_notifications(order: dict):
@@ -1537,17 +1354,17 @@ async def get_products(category: Optional[str] = None):
     """Получить все продукты или по категории из БД"""
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         if category:
             cursor.execute(
-                'SELECT * FROM products WHERE LOWER(category) = LOWER(?)',
+                fix_query('SELECT * FROM products WHERE LOWER(category) = LOWER(?)'),
                 (category,)
             )
         else:
             cursor.execute('SELECT * FROM products')
-        
+
         rows = cursor.fetchall()
-        
+
         products = []
         for row in rows:
             product = dict(row)
@@ -1557,7 +1374,7 @@ async def get_products(category: Optional[str] = None):
             else:
                 product['ingredients'] = []
             products.append(product)
-        
+
         return products
 
 
@@ -1566,18 +1383,18 @@ async def get_product(product_id: str):
     """Получить конкретный продукт из БД"""
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute('SELECT * FROM products WHERE id = ?', (product_id,))
+        cursor.execute(fix_query('SELECT * FROM products WHERE id = ?'), (product_id,))
         row = cursor.fetchone()
-        
+
         if not row:
             raise HTTPException(status_code=404, detail="Product not found")
-        
+
         product = dict(row)
         if product['ingredients']:
             product['ingredients'] = json.loads(product['ingredients'])
         else:
             product['ingredients'] = []
-        
+
         return product
 
 
@@ -1593,17 +1410,17 @@ async def create_order(order: Order):
         cursor = conn.cursor()
 
         for item in order.items:
-            cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
+            cursor.execute(fix_query('SELECT * FROM products WHERE id = ?'), (item.product_id,))
             row = cursor.fetchone()
             if row:
                 total += row['price'] * item.quantity
 
         # Сохраняем заказ
-        cursor.execute('''
+        cursor.execute(fix_query('''
             INSERT INTO orders (id, customer_name, customer_phone, customer_address,
                                customer_telegram, user_telegram_id, total_amount, status, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
+        '''), (
             order_id,
             order.customer_name,
             order.customer_phone,
@@ -1617,15 +1434,15 @@ async def create_order(order: Order):
 
         # Сохраняем элементы заказа с информацией о продукте и поваре
         for item in order.items:
-            cursor.execute('SELECT * FROM products WHERE id = ?', (item.product_id,))
+            cursor.execute(fix_query('SELECT * FROM products WHERE id = ?'), (item.product_id,))
             row = cursor.fetchone()
             if row:
                 # Конвертируем Row в dict для безопасного доступа
                 row_dict = dict(row)
-                cursor.execute('''
+                cursor.execute(fix_query('''
                     INSERT INTO order_items (order_id, product_id, product_name, quantity, price, cook_name, cook_phone, cook_telegram)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (
+                '''), (
                     order_id,
                     item.product_id,
                     row_dict['name'],
@@ -1639,18 +1456,34 @@ async def create_order(order: Order):
         conn.commit()
 
         # Получаем полный заказ для уведомлений
-        cursor.execute('''
-            SELECT o.*,
-                   GROUP_CONCAT(
-                       oi.product_id || ':' || oi.product_name || ':' ||
-                       oi.quantity || ':' || oi.price || ':' ||
-                       COALESCE(oi.cook_telegram, '')
-                   ) as items_data
-            FROM orders o
-            LEFT JOIN order_items oi ON o.id = oi.order_id
-            WHERE o.id = ?
-            GROUP BY o.id
-        ''', (order_id,))
+        # Use STRING_AGG for PostgreSQL or GROUP_CONCAT for SQLite
+        if db.use_postgres:
+            concat_query = '''
+                SELECT o.*,
+                       STRING_AGG(
+                           oi.product_id || ':' || oi.product_name || ':' ||
+                           oi.quantity || ':' || oi.price || ':' ||
+                           COALESCE(oi.cook_telegram, ''), ','
+                       ) as items_data
+                FROM orders o
+                LEFT JOIN order_items oi ON o.id = oi.order_id
+                WHERE o.id = %s
+                GROUP BY o.id
+            '''
+        else:
+            concat_query = '''
+                SELECT o.*,
+                       GROUP_CONCAT(
+                           oi.product_id || ':' || oi.product_name || ':' ||
+                           oi.quantity || ':' || oi.price || ':' ||
+                           COALESCE(oi.cook_telegram, '')
+                       ) as items_data
+                FROM orders o
+                LEFT JOIN order_items oi ON o.id = oi.order_id
+                WHERE o.id = ?
+                GROUP BY o.id
+            '''
+        cursor.execute(concat_query, (order_id,))
         full_order = dict(cursor.fetchone())
 
     order.id = order_id
@@ -1716,26 +1549,26 @@ async def get_order(order_id: str):
     """Получить конкретный заказ из БД"""
     with get_db() as conn:
         cursor = conn.cursor()
-        
-        cursor.execute('SELECT * FROM orders WHERE id = ?', (order_id,))
+
+        cursor.execute(fix_query('SELECT * FROM orders WHERE id = ?'), (order_id,))
         order_row = cursor.fetchone()
-        
+
         if not order_row:
             raise HTTPException(status_code=404, detail="Order not found")
-        
+
         order = dict(order_row)
-        
+
         # Получаем items
-        cursor.execute('''
+        cursor.execute(fix_query('''
             SELECT oi.*, p.name as product_name
             FROM order_items oi
             LEFT JOIN products p ON oi.product_id = p.id
             WHERE oi.order_id = ?
-        ''', (order_id,))
-        
+        '''), (order_id,))
+
         items = [dict(row) for row in cursor.fetchall()]
         order['items'] = items
-        
+
         return order
 
 
@@ -1749,7 +1582,7 @@ async def update_order_status(order_id: str, status: str):
 
     with get_db() as conn:
         cursor = conn.cursor()
-        cursor.execute('UPDATE orders SET status = ? WHERE id = ?', (status, order_id))
+        cursor.execute(fix_query('UPDATE orders SET status = ? WHERE id = ?'), (status, order_id))
 
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Order not found")
@@ -1757,18 +1590,34 @@ async def update_order_status(order_id: str, status: str):
         conn.commit()
 
         # Получаем данные заказа для уведомления
-        cursor.execute('''
-            SELECT o.*,
-                   GROUP_CONCAT(
-                       oi.product_id || ':' || oi.product_name || ':' ||
-                       oi.quantity || ':' || oi.price || ':' ||
-                       COALESCE(oi.cook_telegram, '')
-                   ) as items_data
-            FROM orders o
-            LEFT JOIN order_items oi ON o.id = oi.order_id
-            WHERE o.id = ?
-            GROUP BY o.id
-        ''', (order_id,))
+        # Use STRING_AGG for PostgreSQL or GROUP_CONCAT for SQLite
+        if db.use_postgres:
+            concat_query = '''
+                SELECT o.*,
+                       STRING_AGG(
+                           oi.product_id || ':' || oi.product_name || ':' ||
+                           oi.quantity || ':' || oi.price || ':' ||
+                           COALESCE(oi.cook_telegram, ''), ','
+                       ) as items_data
+                FROM orders o
+                LEFT JOIN order_items oi ON o.id = oi.order_id
+                WHERE o.id = %s
+                GROUP BY o.id
+            '''
+        else:
+            concat_query = '''
+                SELECT o.*,
+                       GROUP_CONCAT(
+                           oi.product_id || ':' || oi.product_name || ':' ||
+                           oi.quantity || ':' || oi.price || ':' ||
+                           COALESCE(oi.cook_telegram, '')
+                       ) as items_data
+                FROM orders o
+                LEFT JOIN order_items oi ON o.id = oi.order_id
+                WHERE o.id = ?
+                GROUP BY o.id
+            '''
+        cursor.execute(concat_query, (order_id,))
         order = cursor.fetchone()
 
     if order:
@@ -1785,12 +1634,12 @@ async def delete_order(order_id: str):
     """Удалить заказ из БД"""
     with get_db() as conn:
         cursor = conn.cursor()
-        
+
         # Удаляем items заказа
-        cursor.execute('DELETE FROM order_items WHERE order_id = ?', (order_id,))
-        
+        cursor.execute(fix_query('DELETE FROM order_items WHERE order_id = ?'), (order_id,))
+
         # Удаляем сам заказ
-        cursor.execute('DELETE FROM orders WHERE id = ?', (order_id,))
+        cursor.execute(fix_query('DELETE FROM orders WHERE id = ?'), (order_id,))
         
         if cursor.rowcount == 0:
             raise HTTPException(status_code=404, detail="Order not found")

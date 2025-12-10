@@ -1,5 +1,4 @@
 import asyncio
-import sqlite3
 import os
 import json
 from datetime import datetime
@@ -14,6 +13,9 @@ from telegram.ext import (
     filters,
     ConversationHandler,
 )
+
+# Import database adapter
+from database import db
 
 # Попытка загрузить из .env файла
 try:
@@ -33,64 +35,18 @@ except:
  CATEGORY, INGREDIENTS, CONFIRM) = range(8)
 
 # === DATABASE ===
-@contextmanager
-def get_db():
-    """Контекстный менеджер для работы с БД"""
-    conn = sqlite3.connect(DATABASE)
-    conn.row_factory = sqlite3.Row
-    try:
-        yield conn
-    finally:
-        conn.close()
+# Compatibility wrapper for existing code
+get_db = db.get_connection
+
+def fix_query(query: str) -> str:
+    """Convert ? placeholders to %s for PostgreSQL"""
+    if db.use_postgres:
+        return query.replace('?', '%s')
+    return query
 
 def init_database():
-    """Инициализация базы данных"""
-    with get_db() as conn:
-        cursor = conn.cursor()
-
-        # Таблица заказов
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS orders (
-                id TEXT PRIMARY KEY,
-                customer_telegram TEXT,
-                customer_address TEXT,
-                customer_phone TEXT,
-                user_telegram_id INTEGER,
-                total_amount REAL,
-                status TEXT DEFAULT 'pending',
-                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-            )
-        ''')
-
-        # Таблица позиций заказов
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS order_items (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                order_id TEXT,
-                product_id TEXT,
-                product_name TEXT,
-                quantity INTEGER,
-                price REAL,
-                cook_telegram TEXT,
-                FOREIGN KEY (order_id) REFERENCES orders(id)
-            )
-        ''')
-
-        # Таблица блюд
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS products (
-                id TEXT PRIMARY KEY,
-                name TEXT,
-                description TEXT,
-                price REAL,
-                image TEXT,
-                cook_telegram TEXT,
-                category TEXT,
-                ingredients TEXT
-            )
-        ''')
-
-        conn.commit()
+    """Database initialization is handled by database.py adapter"""
+    print(f"Bot using: {'PostgreSQL' if db.use_postgres else 'SQLite'}")
 
 # === HELPER FUNCTIONS ===
 def is_admin(user_id: int) -> bool:
@@ -721,15 +677,19 @@ async def save_product(update: Update, context: ContextTypes.DEFAULT_TYPE):
         # Генерируем ID
         with get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT MAX(CAST(id AS INTEGER)) as max_id FROM products WHERE id NOT LIKE "%-%"')
+            # PostgreSQL and SQLite compatible query
+            if db.use_postgres:
+                cursor.execute("SELECT MAX(CAST(id AS INTEGER)) as max_id FROM products WHERE id NOT LIKE %s", ('%-%',))
+            else:
+                cursor.execute('SELECT MAX(CAST(id AS INTEGER)) as max_id FROM products WHERE id NOT LIKE "%-%"')
             result = cursor.fetchone()
             new_id = str((result['max_id'] or 0) + 1)
 
             # Сохраняем
-            cursor.execute('''
+            cursor.execute(fix_query('''
                 INSERT INTO products (id, name, description, price, image, cook_telegram, category, ingredients)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-            ''', (
+            '''), (
                 new_id,
                 product['name'],
                 product['description'],
@@ -1185,14 +1145,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Подтверждение удаления
     elif data.startswith("delete_prod_"):
         product_id = data.replace("delete_prod_", "")
-        
+
         with get_db() as conn:
             cursor = conn.cursor()
-            cursor.execute('SELECT name FROM products WHERE id = ?', (product_id,))
+            cursor.execute(fix_query('SELECT name FROM products WHERE id = ?'), (product_id,))
             product = cursor.fetchone()
-            
+
             if product:
-                cursor.execute('DELETE FROM products WHERE id = ?', (product_id,))
+                cursor.execute(fix_query('DELETE FROM products WHERE id = ?'), (product_id,))
                 conn.commit()
                 await query.edit_message_text(
                     f"✅ Блюдо <b>{product['name']}</b> удалено из меню",
