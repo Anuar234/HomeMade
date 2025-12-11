@@ -215,6 +215,9 @@ class DatabaseAdapter:
 
         print("Database tables initialized successfully")
 
+        # Проверяем, есть ли продукты, если нет - добавляем стартовые
+        self.seed_initial_products()
+
     def get_placeholder(self, index: int = 1) -> str:
         """Получить placeholder для параметров (? для SQLite, %s для PostgreSQL)"""
         if self.use_postgres:
@@ -228,6 +231,61 @@ class DatabaseAdapter:
             return "RETURNING id"
         else:
             return ""
+
+    def seed_initial_products(self):
+        """Заполнить базу начальными продуктами если пусто"""
+        try:
+            # Проверяем количество продуктов
+            count_query = "SELECT COUNT(*) as count FROM products"
+            result = self.execute_query(count_query, fetch='one')
+
+            if result and result['count'] == 0:
+                print("📦 Database is empty, adding initial products...")
+
+                products = [
+                    ("1", "Домашние пельмени", "Сочные пельмени с говядиной и свининой, как в России", 25.0,
+                     "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=150&q=80&fm=webp&fit=crop",
+                     "pelmeni", '["Мука", "Яйцо", "Говядина", "Свинина", "Лук"]', "", "Анна Петрова", "+971501234567"),
+
+                    ("2", "Узбекский плов", "Настоящий узбекский плов с бараниной и специями", 30.0,
+                     "https://images.unsplash.com/photo-1596040033229-a0b3b7f5c777?w=150&q=80&fm=webp&fit=crop",
+                     "plov", '["Рис", "Баранина", "Морковь", "Лук", "Чеснок"]', "", "Фарход Алиев", "+971507654321"),
+
+                    ("3", "Домашний борщ", "Украинский борщ с говядиной и сметаной", 18.0,
+                     "https://images.unsplash.com/photo-1571064247530-4146bc1a081b?w=150&q=80&fm=webp&fit=crop",
+                     "soup", '["Свекла", "Говядина", "Капуста", "Картофель"]', "", "Оксана Коваль", "+971509876543"),
+
+                    ("4", "Хачапури по-аджарски", "Грузинский хачапури с сыром и яйцом", 22.0,
+                     "https://images.unsplash.com/photo-1627662235973-4d265e175fc1?w=150&q=80&fm=webp&fit=crop",
+                     "khachapuri", '["Мука", "Сыр", "Яйцо", "Молоко"]', "", "Нино Джавахишвили", "+971508765432"),
+
+                    ("5", "Домашний бургер", "Сочный бургер с говяжьей котлетой и свежими овощами", 35.0,
+                     "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=150&q=80&fm=webp&fit=crop",
+                     "burger", '["Булочка", "Говядина", "Сыр", "Салат", "Помидор"]', "", "Михаил Сидоров", "+971501111111"),
+
+                    ("6", "Пицца Маргарита", "Классическая итальянская пицца с моцареллой и базиликом", 28.0,
+                     "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=150&q=80&fm=webp&fit=crop",
+                     "pizza", '["Тесто", "Томатный соус", "Моцарелла", "Базилик"]', "", "Джованни Росси", "+971502222222"),
+                ]
+
+                placeholder = self.get_placeholder()
+                insert_query = f"""
+                INSERT INTO products (id, name, description, price, image, category, ingredients, cook_telegram, cook_name, cook_phone)
+                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+                """
+
+                for product in products:
+                    self.execute_query(insert_query, product)
+                    print(f"  ✅ Added: {product[1]} ({product[5]})")
+
+                print(f"✅ Added {len(products)} initial products to database")
+            else:
+                print(f"✓ Database already has {result['count']} products")
+
+        except Exception as e:
+            print(f"⚠️ Error seeding initial products: {e}")
+            import traceback
+            traceback.print_exc()
 
 
 # Создаем глобальный экземпляр адаптера
