@@ -280,10 +280,16 @@ class DatabaseAdapter:
 
                 print(f"✅ Added {len(products)} initial products to database")
             else:
-                print(f"✓ Database already has {result['count']} products")
+                try:
+                    print(f"✓ Database already has {result['count']} products")
+                except UnicodeEncodeError:
+                    print(f"Database already has {result['count']} products")
 
         except Exception as e:
-            print(f"⚠️ Error seeding initial products: {e}")
+            try:
+                print(f"⚠️ Error seeding initial products: {e}")
+            except UnicodeEncodeError:
+                print(f"Error seeding initial products: {e}")
             import traceback
             traceback.print_exc()
 
