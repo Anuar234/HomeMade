@@ -258,8 +258,8 @@ class Product(BaseModel):
     description: str
     price: float
     image: str
-    cook_name: str
-    cook_phone: str
+    cook_name: Optional[str] = None
+    cook_phone: Optional[str] = None
     category: str
     ingredients: Optional[List[str]] = []
 

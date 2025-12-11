@@ -313,39 +313,42 @@ def get_products_by_category(category: str):
 
 
 def add_product(name: str, description: str, price: float, image: str,
-                category: str, ingredients: str, cook_telegram: str = ""):
+                category: str, ingredients: str, cook_telegram: str = "",
+                cook_name: str = "", cook_phone: str = ""):
     """Добавить новый продукт"""
     import uuid
-    
+
     # Генерируем короткий уникальный ID
     product_id = str(uuid.uuid4())[:8]
-    
+
     placeholder = db.get_placeholder()
-    
+
     # Формируем query
     query = f"""
-    INSERT INTO products (id, name, description, price, image, category, ingredients, cook_telegram)
-    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+    INSERT INTO products (id, name, description, price, image, category, ingredients, cook_telegram, cook_name, cook_phone)
+    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
     """
-    
+
     # Собираем все параметры в tuple
     params = (
-        product_id, 
-        name, 
-        description, 
-        price, 
-        image, 
-        category, 
-        ingredients, 
-        cook_telegram
+        product_id,
+        name,
+        description,
+        price,
+        image,
+        category,
+        ingredients,
+        cook_telegram,
+        cook_name,
+        cook_phone
     )
-    
+
     # Выполняем запрос
     db.execute_query(query, params)
-    
+
     # Логирование для отладки
     print(f"✅ Product added to DB: ID={product_id}, Name={name}, Category={category}")
-    
+
     return product_id
 
 
