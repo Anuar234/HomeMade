@@ -39,6 +39,40 @@ def fix_query(query: str) -> str:
     return query
 
 
+def get_agg_func():
+    """Get the appropriate aggregation function for the current database"""
+    if db.use_postgres:
+        return "STRING_AGG(oi.product_id || ':' || oi.product_name || ':' || oi.quantity || ':' || oi.price || ':', ',')"
+    else:
+        return "GROUP_CONCAT(oi.product_id || ':' || oi.product_name || ':' || oi.quantity || ':' || oi.price || ':')"
+
+
+def get_orders_query(status_filter=None):
+    """Get SQL query for fetching orders (handles PostgreSQL vs SQLite)"""
+    agg_func = get_agg_func()
+
+    # Handle single status, list of statuses, or no filter
+    if status_filter:
+        if isinstance(status_filter, list):
+            statuses = "', '".join(status_filter)
+            where_clause = f"WHERE o.status IN ('{statuses}')"
+        else:
+            where_clause = f"WHERE o.status = '{status_filter}'"
+    else:
+        where_clause = ""
+
+    return f'''
+        SELECT o.*,
+               {agg_func} as items_data
+        FROM orders o
+        LEFT JOIN order_items oi ON o.id = oi.order_id
+        {where_clause}
+        GROUP BY o.id
+        ORDER BY o.created_at DESC
+        LIMIT 5
+    '''
+
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Main callback handler for all inline keyboard button presses
@@ -119,18 +153,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "orders_all":
         with get_db() as conn:
             cursor = get_cursor(conn)
-            cursor.execute('''
-                SELECT o.*,
-                       GROUP_CONCAT(
-                           oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':'
-                       ) as items_data
-                FROM orders o
-                LEFT JOIN order_items oi ON o.id = oi.order_id
-                GROUP BY o.id
-                ORDER BY o.created_at DESC
-                LIMIT 5
-            ''')
+            cursor.execute(get_orders_query())
             orders = cursor.fetchall()
 
         if not orders:
@@ -155,19 +178,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "orders_pending":
         with get_db() as conn:
             cursor = get_cursor(conn)
-            cursor.execute('''
-                SELECT o.*,
-                       GROUP_CONCAT(
-                           oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':' ||
-                           COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
-                       ) as items_data
-                FROM orders o
-                LEFT JOIN order_items oi ON o.id = oi.order_id
-                WHERE o.status = 'pending'
-                GROUP BY o.id
-                ORDER BY o.created_at DESC
-            ''')
+            cursor.execute(get_orders_query('pending'))
             orders = cursor.fetchall()
 
         if not orders:
@@ -196,18 +207,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif data == "orders_cooking":
         with get_db() as conn:
             cursor = get_cursor(conn)
-            cursor.execute('''
-                SELECT o.*,
-                       GROUP_CONCAT(
-                           oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':'
-                       ) as items_data
-                FROM orders o
-                LEFT JOIN order_items oi ON o.id = oi.order_id
-                WHERE o.status IN ('confirmed', 'cooking')
-                GROUP BY o.id
-                ORDER BY o.created_at DESC
-            ''')
+            cursor.execute(get_orders_query(['confirmed', 'cooking']))
             orders = cursor.fetchall()
 
         if not orders:
@@ -234,19 +234,18 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         with get_db() as conn:
             cursor = get_cursor(conn)
-            cursor.execute('''
-            SELECT o.*,
-                   GROUP_CONCAT(
-                       oi.product_id || ':' || oi.product_name || ':' ||
-                       oi.quantity || ':' || oi.price || ':' ||
-                   ) as items_data
-            FROM orders o
-            LEFT JOIN order_items oi ON o.id = oi.order_id
-            WHERE o.user_telegram_id = ?
-            GROUP BY o.id
-            ORDER BY o.created_at DESC
-            LIMIT 5
-        ''', (user_id,))
+            agg_func = get_agg_func()
+            query_sql = f'''
+                SELECT o.*,
+                       {agg_func} as items_data
+                FROM orders o
+                LEFT JOIN order_items oi ON o.id = oi.order_id
+                WHERE o.user_telegram_id = {fix_query('?')}
+                GROUP BY o.id
+                ORDER BY o.created_at DESC
+                LIMIT 5
+            '''
+            cursor.execute(query_sql, (user_id,))
             orders = cursor.fetchall()
 
         if not orders:
@@ -324,17 +323,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         with get_db() as conn:
             cursor = get_cursor(conn)
-            cursor.execute('''
+            agg_func = get_agg_func()
+            query_sql = f'''
                 SELECT o.*,
-                       GROUP_CONCAT(
-                           oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':'
-                       ) as items_data
+                       {agg_func} as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
-                WHERE o.id = ?
+                WHERE o.id = {fix_query('?')}
                 GROUP BY o.id
-            ''', (order_id,))
+            '''
+            cursor.execute(query_sql, (order_id,))
             order = cursor.fetchone()
 
         if not order:
@@ -376,22 +374,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         with get_db() as conn:
             cursor = get_cursor(conn)
             cursor.execute(
-                'UPDATE orders SET status = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?',
+                fix_query('UPDATE orders SET status = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?'),
                 (new_status, order_id)
             )
             conn.commit()
 
-            cursor.execute('''
+            agg_func = get_agg_func()
+            query_sql = f'''
                 SELECT o.*,
-                       GROUP_CONCAT(
-                           oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':'
-                       ) as items_data
+                       {agg_func} as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
-                WHERE o.id = ?
+                WHERE o.id = {fix_query('?')}
                 GROUP BY o.id
-            ''', (order_id,))
+            '''
+            cursor.execute(query_sql, (order_id,))
             order = dict(cursor.fetchone())
 
         keyboard = [

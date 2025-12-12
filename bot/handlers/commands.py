@@ -33,6 +33,14 @@ def get_cursor(conn):
         return conn.cursor()
 
 
+def get_agg_func():
+    """Get the appropriate aggregation function for the current database"""
+    if db.use_postgres:
+        return "STRING_AGG(oi.product_id || ':' || oi.product_name || ':' || oi.quantity || ':' || oi.price || ':', ',')"
+    else:
+        return "GROUP_CONCAT(oi.product_id || ':' || oi.product_name || ':' || oi.quantity || ':' || oi.price || ':')"
+
+
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """
     Handle /start command
@@ -114,13 +122,10 @@ async def orders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     with get_db() as conn:
         cursor = get_cursor(conn)
-        cursor.execute('''
+        agg_func = get_agg_func()
+        cursor.execute(f'''
             SELECT o.*,
-                   GROUP_CONCAT(
-                       oi.product_id || ':' || oi.product_name || ':' ||
-                       oi.quantity || ':' || oi.price || ':' ||
-                       COALESCE(oi.cook_name, '') || ':' || COALESCE(oi.cook_phone, '')
-                   ) as items_data
+                   {agg_func} as items_data
             FROM orders o
             LEFT JOIN order_items oi ON o.id = oi.order_id
             GROUP BY o.id
@@ -161,12 +166,10 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     with get_db() as conn:
         cursor = get_cursor(conn)
-        cursor.execute('''
+        agg_func = get_agg_func()
+        cursor.execute(f'''
             SELECT o.*,
-                   GROUP_CONCAT(
-                       oi.product_id || ':' || oi.product_name || ':' ||
-                       oi.quantity || ':' || oi.price || ':' ||
-                   ) as items_data
+                   {agg_func} as items_data
             FROM orders o
             LEFT JOIN order_items oi ON o.id = oi.order_id
             WHERE o.status = 'pending'

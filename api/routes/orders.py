@@ -37,6 +37,14 @@ def fix_query(query: str) -> str:
     return query
 
 
+def get_agg_func():
+    """Get the appropriate aggregation function for the current database"""
+    if db.use_postgres:
+        return "STRING_AGG(oi.product_id || ':' || oi.product_name || ':' || oi.quantity || ':' || oi.price || ':', ',')"
+    else:
+        return "GROUP_CONCAT(oi.product_id || ':' || oi.product_name || ':' || oi.quantity || ':' || oi.price || ':')"
+
+
 @router.post("/api/orders", response_model=Order)
 async def create_order(order: Order):
     """Создать новый заказ в БД"""
@@ -52,7 +60,7 @@ async def create_order(order: Order):
             cursor.execute(fix_query('SELECT * FROM products WHERE id = ?'), (item.product_id,))
             row = cursor.fetchone()
             if row:
-                total += row['price'] * item.quantity
+                total += float(row['price']) * item.quantity
 
         # Сохраняем заказ
         cursor.execute(fix_query('''
@@ -140,14 +148,11 @@ async def get_orders():
     """Получить все заказы из БД"""
     with get_db() as conn:
         cursor = get_cursor(conn)
+        agg_func = get_agg_func()
 
-        cursor.execute('''
+        cursor.execute(f'''
             SELECT o.*,
-                   GROUP_CONCAT(
-                       oi.product_id || ':' || oi.product_name || ':' ||
-                       oi.quantity || ':' || oi.price || ':' ||
-                       oi.cook_name || ':' || oi.cook_phone
-                   ) as items_data
+                   {agg_func} as items_data
             FROM orders o
             LEFT JOIN order_items oi ON o.id = oi.order_id
             GROUP BY o.id
