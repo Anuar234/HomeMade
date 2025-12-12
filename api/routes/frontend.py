@@ -806,28 +806,6 @@ async def get_app_category(category: str):
 
                     <form @submit.prevent="submitOrder">
                         <div class="form-group">
-                            <label class="form-label">👤 Ваше имя *</label>
-                            <input
-                                type="text"
-                                class="form-input"
-                                v-model="customerInfo.name"
-                                placeholder="Введите ваше имя"
-                                required
-                            />
-                        </div>
-
-                        <div class="form-group">
-                            <label class="form-label">📱 Телефон *</label>
-                            <input
-                                type="tel"
-                                class="form-input"
-                                v-model="customerInfo.phone"
-                                placeholder="+971501234567"
-                                required
-                            />
-                        </div>
-
-                        <div class="form-group">
                             <label class="form-label">📍 Адрес доставки *</label>
                             <input
                                 type="text"
@@ -836,6 +814,10 @@ async def get_app_category(category: str):
                                 placeholder="Район, улица, дом"
                                 required
                             />
+                        </div>
+
+                        <div style="background: #e3f2fd; padding: 12px; border-radius: 8px; margin-bottom: 15px; font-size: 14px;">
+                            <strong>📱 Ваш Telegram:</strong> @{{{{ user?.username || 'не указан' }}}}
                         </div>
 
                         <div style="background: #f5f5f5; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
@@ -875,8 +857,6 @@ async def get_app_category(category: str):
                 const categoryName = ref('{category_display}');
 
                 const customerInfo = ref({{
-                    name: '',
-                    phone: '',
                     address: ''
                 }});
 
@@ -937,7 +917,7 @@ async def get_app_category(category: str):
 
                 const cancelCheckout = () => {{
                     showCheckoutForm.value = false;
-                    customerInfo.value = {{ name: '', phone: '', address: '' }};
+                    customerInfo.value = {{ address: '' }};
                     orderSuccess.value = null;
                     orderError.value = null;
                 }};
@@ -955,8 +935,8 @@ async def get_app_category(category: str):
 
                         // Подготавливаем данные заказа
                         const orderData = {{
-                            customer_name: customerInfo.value.name,
-                            customer_phone: customerInfo.value.phone,
+                            customer_name: user?.first_name || user?.username || 'Клиент',
+                            customer_phone: 'Telegram: @' + (user?.username || user?.id),
                             customer_address: customerInfo.value.address,
                             customer_telegram: user?.username || '',
                             user_telegram_id: user?.id || null,
@@ -1013,10 +993,10 @@ async def get_app_category(category: str):
                         // Очищаем корзину через 2 секунды
                         setTimeout(() => {{
                             cart.value = [];
-                            customerInfo.value = {{ name: '', phone: '', address: '' }};
+                            customerInfo.value = {{ address: '' }};
                             showCheckoutForm.value = false;
                             orderSuccess.value = null;
-                            alert(`✅ Заказ #${{savedOrder.id}} успешно создан!\\n\\nПовара получили уведомление и свяжутся с вами в WhatsApp.`);
+                            alert(`✅ Заказ #${{savedOrder.id}} успешно создан!\\n\\nМы получили ваш заказ и скоро свяжемся с вами в Telegram.`);
                         }}, 2000);
 
                     }} catch (error) {{
