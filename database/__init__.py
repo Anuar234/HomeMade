@@ -337,7 +337,10 @@ def add_product(name: str, description: str, price: float, image: str,
     db.execute_query(query, params)
 
     # Логирование для отладки
-    print(f"✅ Product added to DB: ID={product_id}, Name={name}, Category={category}")
+    try:
+        print(f"Product added to DB: ID={product_id}, Name={name}, Category={category}")
+    except UnicodeEncodeError:
+        print(f"Product added: {product_id}")
 
     return product_id
 

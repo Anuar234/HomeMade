@@ -198,6 +198,7 @@ async def product_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         [InlineKeyboardButton("🥟 Пельмени", callback_data="cat_pelmeni")],
         [InlineKeyboardButton("🥖 Хачапури", callback_data="cat_khachapuri")],
         [InlineKeyboardButton("🍰 Десерты", callback_data="cat_dessert")],
+        [InlineKeyboardButton("🥗 Закуски", callback_data="cat_salad")],
         [InlineKeyboardButton("🥤 Напитки", callback_data="cat_drinks")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
