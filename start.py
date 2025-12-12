@@ -35,12 +35,21 @@ async def lifespan(app):
         return
     
     try:
-        import bot
+        # Import create_application from bot.py (not bot module)
+        import sys
+        sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+
+        # Import bot.py as a module
+        import importlib.util
+        spec = importlib.util.spec_from_file_location("bot_app", "bot.py")
+        bot_module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bot_module)
+
         from database import db
         print(f"Database: {'PostgreSQL' if db.use_postgres else 'SQLite'}")
 
         # Создаем приложение
-        application = bot.create_application()
+        application = bot_module.create_application()
         
         if application:
             # КРИТИЧЕСКИ ВАЖНО: инициализируем приложение полностью
