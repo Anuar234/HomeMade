@@ -48,6 +48,20 @@ async def lifespan(app):
         from database import db
         print(f"Database: {'PostgreSQL' if db.use_postgres else 'SQLite'}")
 
+        # Run migration if on Railway
+        if RAILWAY_URL:
+            print("🔄 Running database migration...")
+            try:
+                import subprocess
+                result = subprocess.run(['python', 'migrate_products.py'],
+                                      capture_output=True, text=True, timeout=30)
+                if result.stdout:
+                    print(result.stdout)
+                if result.returncode != 0 and result.stderr:
+                    print(f"Migration warning: {result.stderr}")
+            except Exception as e:
+                print(f"Migration skipped: {e}")
+
         # Создаем приложение
         application = bot_module.create_application()
         
