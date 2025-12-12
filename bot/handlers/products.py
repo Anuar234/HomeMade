@@ -443,8 +443,8 @@ async def edit_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE)
     for i in range(0, len(products), 3):
         row = []
         for product in products[i:i+3]:
-            product_id = product[0]
-            product_name = product[1]
+            product_id = product['id']
+            product_name = product['name']
             # Truncate long names
             display_name = product_name[:20] + '...' if len(product_name) > 20 else product_name
             row.append(InlineKeyboardButton(display_name, callback_data=f"editprod_{product_id}"))
@@ -473,7 +473,7 @@ async def edit_select_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Get product details
     products = get_all_products()
-    product = next((p for p in products if p[0] == product_id), None)
+    product = next((p for p in products if p['id'] == product_id), None)
 
     if not product:
         await query.edit_message_text("❌ Продукт не найден")
@@ -481,11 +481,11 @@ async def edit_select_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # Store product info
     context.user_data['edit_product_info'] = {
-        'id': product[0],
-        'name': product[1],
-        'description': product[2],
-        'price': product[3],
-        'image': product[4]
+        'id': product['id'],
+        'name': product['name'],
+        'description': product['description'],
+        'price': product['price'],
+        'image': product['image']
     }
 
     keyboard = [
@@ -497,13 +497,13 @@ async def edit_select_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
-    text = f"""📦 <b>Продукт:</b> {product[1]}
+    text = f"""📦 <b>Продукт:</b> {product['name']}
 
 <b>Текущие данные:</b>
-📝 Название: {product[1]}
-📄 Описание: {product[2][:100]}{'...' if len(product[2]) > 100 else ''}
-💰 Цена: {product[3]} AED
-🖼️ Изображение: {product[4][:50]}...
+📝 Название: {product['name']}
+📄 Описание: {product['description'][:100]}{'...' if len(product['description']) > 100 else ''}
+💰 Цена: {product['price']} AED
+🖼️ Изображение: {product['image'][:50]}...
 
 Что вы хотите изменить?"""
 
