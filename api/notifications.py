@@ -48,7 +48,12 @@ async def send_telegram_notifications(order: dict):
                     cook_info = f" (👨‍🍳 @{cook_telegram})" if cook_telegram else ""
                     items_text += f"  • {product_name} x{quantity} = {price} AED{cook_info}\n"
 
-        created = datetime.fromisoformat(order['created_at']).strftime('%d.%m.%Y %H:%M')
+        # Handle both datetime objects and ISO strings
+        created_at = order['created_at']
+        if isinstance(created_at, str):
+            created = datetime.fromisoformat(created_at).strftime('%d.%m.%Y %H:%M')
+        else:
+            created = created_at.strftime('%d.%m.%Y %H:%M')
 
         customer_telegram = order.get('customer_telegram', 'Не указан')
         telegram_display = f"@{customer_telegram}" if customer_telegram and customer_telegram != 'Не указан' else customer_telegram
