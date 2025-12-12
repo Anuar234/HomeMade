@@ -43,10 +43,8 @@ async def send_telegram_notifications(order: dict):
                     product_name = parts[1]
                     quantity = parts[2]
                     price = parts[3]
-                    cook_telegram = parts[4] if len(parts) > 4 else ''
 
-                    cook_info = f" (👨‍🍳 @{cook_telegram})" if cook_telegram else ""
-                    items_text += f"  • {product_name} x{quantity} = {price} AED{cook_info}\n"
+                    items_text += f"  • {product_name} x{quantity} = {price} AED\n"
 
         # Handle both datetime objects and ISO strings
         created_at = order['created_at']

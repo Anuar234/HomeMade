@@ -4,7 +4,7 @@ Conversation states, emojis, categories, and other static values
 """
 
 # Conversation States for adding products
-NAME, DESCRIPTION, PRICE, IMAGE, COOK_TELEGRAM, CATEGORY, INGREDIENTS, CONFIRM = range(8)
+NAME, DESCRIPTION, PRICE, IMAGE, CATEGORY, INGREDIENTS, CONFIRM = range(7)
 
 # Order status emojis
 STATUS_EMOJI = {
@@ -44,6 +44,5 @@ ERROR_MESSAGES = {
     'description_too_short': '❌ Описание слишком короткое. Минимум 10 символов.',
     'invalid_price': '❌ Неверная цена. Введите число (например: 25 или 25.50)',
     'invalid_url': '❌ Неверный URL изображения. Должен начинаться с http:// или https://',
-    'invalid_telegram': '❌ Неверный формат. Введите @ или username',
     'not_admin': '❌ У вас нет доступа к этой команде.'
 }

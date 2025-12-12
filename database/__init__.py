@@ -88,10 +88,7 @@ class DatabaseAdapter:
                 price DECIMAL(10, 2) NOT NULL,
                 image VARCHAR(500),
                 category VARCHAR(100),
-                ingredients TEXT,
-                cook_telegram VARCHAR(100),
-                cook_name VARCHAR(255),
-                cook_phone VARCHAR(50)
+                ingredients TEXT
             )
             """
         else:
@@ -103,10 +100,7 @@ class DatabaseAdapter:
                 price REAL NOT NULL,
                 image TEXT,
                 category TEXT,
-                ingredients TEXT,
-                cook_telegram TEXT,
-                cook_name TEXT,
-                cook_phone TEXT
+                ingredients TEXT
             )
             """
 
@@ -150,9 +144,6 @@ class DatabaseAdapter:
                 product_name VARCHAR(255),
                 quantity INTEGER NOT NULL,
                 price DECIMAL(10, 2) NOT NULL,
-                cook_name VARCHAR(255),
-                cook_phone VARCHAR(50),
-                cook_telegram VARCHAR(100),
                 FOREIGN KEY (order_id) REFERENCES orders (id),
                 FOREIGN KEY (product_id) REFERENCES products (id)
             )
@@ -166,9 +157,6 @@ class DatabaseAdapter:
                 product_name TEXT,
                 quantity INTEGER NOT NULL,
                 price REAL NOT NULL,
-                cook_name TEXT,
-                cook_phone TEXT,
-                cook_telegram TEXT,
                 FOREIGN KEY (order_id) REFERENCES orders (id),
                 FOREIGN KEY (product_id) REFERENCES products (id)
             )
@@ -245,33 +233,33 @@ class DatabaseAdapter:
                 products = [
                     ("1", "Домашние пельмени", "Сочные пельмени с говядиной и свининой, как в России", 25.0,
                      "https://images.unsplash.com/photo-1578662996442-48f60103fc96?w=150&q=80&fm=webp&fit=crop",
-                     "pelmeni", '["Мука", "Яйцо", "Говядина", "Свинина", "Лук"]', "", "Анна Петрова", "+971501234567"),
+                     "pelmeni", '["Мука", "Яйцо", "Говядина", "Свинина", "Лук"]'),
 
                     ("2", "Узбекский плов", "Настоящий узбекский плов с бараниной и специями", 30.0,
                      "https://images.unsplash.com/photo-1596040033229-a0b3b7f5c777?w=150&q=80&fm=webp&fit=crop",
-                     "plov", '["Рис", "Баранина", "Морковь", "Лук", "Чеснок"]', "", "Фарход Алиев", "+971507654321"),
+                     "plov", '["Рис", "Баранина", "Морковь", "Лук", "Чеснок"]'),
 
                     ("3", "Домашний борщ", "Украинский борщ с говядиной и сметаной", 18.0,
                      "https://images.unsplash.com/photo-1571064247530-4146bc1a081b?w=150&q=80&fm=webp&fit=crop",
-                     "soup", '["Свекла", "Говядина", "Капуста", "Картофель"]', "", "Оксана Коваль", "+971509876543"),
+                     "soup", '["Свекла", "Говядина", "Капуста", "Картофель"]'),
 
                     ("4", "Хачапури по-аджарски", "Грузинский хачапури с сыром и яйцом", 22.0,
                      "https://images.unsplash.com/photo-1627662235973-4d265e175fc1?w=150&q=80&fm=webp&fit=crop",
-                     "khachapuri", '["Мука", "Сыр", "Яйцо", "Молоко"]', "", "Нино Джавахишвили", "+971508765432"),
+                     "khachapuri", '["Мука", "Сыр", "Яйцо", "Молоко"]'),
 
                     ("5", "Домашний бургер", "Сочный бургер с говяжьей котлетой и свежими овощами", 35.0,
                      "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=150&q=80&fm=webp&fit=crop",
-                     "burger", '["Булочка", "Говядина", "Сыр", "Салат", "Помидор"]', "", "Михаил Сидоров", "+971501111111"),
+                     "burger", '["Булочка", "Говядина", "Сыр", "Салат", "Помидор"]'),
 
                     ("6", "Пицца Маргарита", "Классическая итальянская пицца с моцареллой и базиликом", 28.0,
                      "https://images.unsplash.com/photo-1565299624946-b28f40a0ca4b?w=150&q=80&fm=webp&fit=crop",
-                     "pizza", '["Тесто", "Томатный соус", "Моцарелла", "Базилик"]', "", "Джованни Росси", "+971502222222"),
+                     "pizza", '["Тесто", "Томатный соус", "Моцарелла", "Базилик"]'),
                 ]
 
                 placeholder = self.get_placeholder()
                 insert_query = f"""
-                INSERT INTO products (id, name, description, price, image, category, ingredients, cook_telegram, cook_name, cook_phone)
-                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+                INSERT INTO products (id, name, description, price, image, category, ingredients)
+                VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
                 """
 
                 for product in products:
@@ -319,8 +307,7 @@ def get_products_by_category(category: str):
 
 
 def add_product(name: str, description: str, price: float, image: str,
-                category: str, ingredients: str, cook_telegram: str = "",
-                cook_name: str = "", cook_phone: str = ""):
+                category: str, ingredients: str):
     """Добавить новый продукт"""
     import uuid
 
@@ -331,8 +318,8 @@ def add_product(name: str, description: str, price: float, image: str,
 
     # Формируем query
     query = f"""
-    INSERT INTO products (id, name, description, price, image, category, ingredients, cook_telegram, cook_name, cook_phone)
-    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
+    INSERT INTO products (id, name, description, price, image, category, ingredients)
+    VALUES ({placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder}, {placeholder})
     """
 
     # Собираем все параметры в tuple
@@ -343,10 +330,7 @@ def add_product(name: str, description: str, price: float, image: str,
         price,
         image,
         category,
-        ingredients,
-        cook_telegram,
-        cook_name,
-        cook_phone
+        ingredients
     )
 
     # Выполняем запрос

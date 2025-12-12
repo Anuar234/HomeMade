@@ -15,7 +15,7 @@ from telegram.ext import (
 )
 
 from ..config import ADMIN_IDS
-from ..constants import NAME, DESCRIPTION, PRICE, IMAGE, COOK_TELEGRAM, CATEGORY, INGREDIENTS, CONFIRM
+from ..constants import NAME, DESCRIPTION, PRICE, IMAGE, CATEGORY, INGREDIENTS, CONFIRM
 
 # Import from root database module
 from database import add_product
@@ -54,7 +54,7 @@ async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     response_text = (
         "📦 *Добавление нового продукта*\n\n"
-        "Шаг 1 из 7\n\n"
+        "Шаг 1 из 6\n\n"
         "*Введите название продукта:*\n\n"
         "Например: _Бургер Классический_\n\n"
         "Или /cancel - для отмены"
@@ -84,7 +84,7 @@ async def product_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await update.message.reply_text(
         f"✅ Название: <b>{name}</b>\n\n"
-        "Шаг 2 из 7\n"
+        "Шаг 2 из 6\n"
         "Введите <b>описание блюда</b>:\n\n"
         "✏️ Например: Сочные пельмени с говядиной и свининой, как в России\n\n"
         "💡 <i>Совет: Опишите вкус, состав и особенности блюда</i>",
@@ -111,7 +111,7 @@ async def product_description(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     await update.message.reply_text(
         "✅ Описание сохранено\n\n"
-        "Шаг 3 из 7\n"
+        "Шаг 3 из 6\n"
         "Введите <b>цену в AED</b> (только число):\n\n"
         "✏️ Например: 25 или 35.5",
         parse_mode='HTML'
@@ -134,7 +134,7 @@ async def product_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         await update.message.reply_text(
             f"✅ Цена: <b>{price} AED</b>\n\n"
-            "Шаг 4 из 7\n"
+            "Шаг 4 из 6\n"
             "Отправьте <b>ссылку на изображение блюда</b>:\n\n"
             "💡 <b>Совет:</b> Используйте Unsplash для качественных фото еды:\n"
             "1. Перейдите на unsplash.com\n"
@@ -190,77 +190,20 @@ async def product_image(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return IMAGE
 
-    await update.message.reply_text(
-        "Шаг 5 из 7\n"
-        "Введите <b>Telegram username повара</b> (без @):\n\n"
-        "Например: turlubay\n"
-        "Или отправьте /skip чтобы пропустить",
-        parse_mode='HTML'
-    )
-
-    return COOK_TELEGRAM
-
-
-async def product_cook_telegram(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """
-    Handle cook's Telegram username input (Step 5)
-    """
-    text = update.message.text.strip()
-
-    # Check for commands
-    if text == '/continue':
-        # Continue with current image
-        pass
-    elif text == '/skip':
-        # Skip cook username
-        context.user_data['new_product']['cook_telegram'] = ''
-        keyboard = [
-            [InlineKeyboardButton("🍔 burger", callback_data="cat_burger")],
-            [InlineKeyboardButton("🍕 pizza", callback_data="cat_pizza")],
-            [InlineKeyboardButton("🍚 plov", callback_data="cat_plov")],
-            [InlineKeyboardButton("🍲 soup", callback_data="cat_soup")],
-            [InlineKeyboardButton("🥟 pelmeni", callback_data="cat_pelmeni")],
-            [InlineKeyboardButton("🥖 khachapuri", callback_data="cat_khachapuri")],
-            [InlineKeyboardButton("🍰 dessert", callback_data="cat_dessert")],
-            [InlineKeyboardButton("🥗 salad", callback_data="cat_salad")],
-        ]
-        reply_markup = InlineKeyboardMarkup(keyboard)
-
-        await update.message.reply_text(
-            "⏭️ Пропущено\n\n"
-            "Шаг 6 из 7\n"
-            "Выберите <b>категорию блюда</b>:",
-            reply_markup=reply_markup,
-            parse_mode='HTML'
-        )
-        return CATEGORY
-    else:
-        telegram_username = text.replace('@', '').strip()
-
-        if not telegram_username:
-            await update.message.reply_text(
-                "❌ Пожалуйста, введите корректный Telegram username\n"
-                "Или отправьте /skip чтобы пропустить"
-            )
-            return COOK_TELEGRAM
-
-        context.user_data['new_product']['cook_telegram'] = telegram_username
-
     keyboard = [
-        [InlineKeyboardButton("🍔 burger", callback_data="cat_burger")],
-        [InlineKeyboardButton("🍕 pizza", callback_data="cat_pizza")],
-        [InlineKeyboardButton("🍚 plov", callback_data="cat_plov")],
-        [InlineKeyboardButton("🍲 soup", callback_data="cat_soup")],
-        [InlineKeyboardButton("🥟 pelmeni", callback_data="cat_pelmeni")],
-        [InlineKeyboardButton("🥖 khachapuri", callback_data="cat_khachapuri")],
-        [InlineKeyboardButton("🍰 dessert", callback_data="cat_dessert")],
-        [InlineKeyboardButton("🥗 salad", callback_data="cat_salad")],
+        [InlineKeyboardButton("🍔 Бургеры", callback_data="cat_burger")],
+        [InlineKeyboardButton("🍕 Пицца", callback_data="cat_pizza")],
+        [InlineKeyboardButton("🍚 Плов", callback_data="cat_plov")],
+        [InlineKeyboardButton("🍲 Супы", callback_data="cat_soup")],
+        [InlineKeyboardButton("🥟 Пельмени", callback_data="cat_pelmeni")],
+        [InlineKeyboardButton("🥖 Хачапури", callback_data="cat_khachapuri")],
+        [InlineKeyboardButton("🍰 Десерты", callback_data="cat_dessert")],
+        [InlineKeyboardButton("🥤 Напитки", callback_data="cat_drinks")],
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     await update.message.reply_text(
-        f"✅ Telegram: <b>@{telegram_username}</b>\n\n"
-        "Шаг 6 из 7\n"
+        "Шаг 5 из 6\n"
         "Выберите <b>категорию блюда</b>:",
         reply_markup=reply_markup,
         parse_mode='HTML'
@@ -281,7 +224,7 @@ async def product_category(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     await query.edit_message_text(
         f"✅ Категория: <b>{category}</b>\n\n"
-        "Шаг 7 из 7\n"
+        "Шаг 6 из 6\n"
         "Введите <b>ингредиенты</b> через запятую:\n\n"
         "Например: Мука, Яйцо, Говядина, Свинина, Лук, Соль, Перец",
         parse_mode='HTML'
@@ -326,9 +269,6 @@ async def product_ingredients(update: Update, context: ContextTypes.DEFAULT_TYPE
 💰 <b>Цена:</b> {product['price']} AED
 📂 <b>Категория:</b> {product['category']}
 """
-
-    if product.get('cook_telegram'):
-        preview_text += f"👨‍🍳 <b>Повар:</b> @{product['cook_telegram']}\n"
 
     if ingredients_list:
         preview_text += f"🥘 <b>Ингредиенты:</b> {', '.join(ingredients_list[:8])}{'...' if len(ingredients_list) > 8 else ''}\n"
@@ -388,8 +328,7 @@ async def saveproduct(update: Update, context: ContextTypes.DEFAULT_TYPE):
             price=product['price'],
             image=product['image'],
             category=product['category'],
-            ingredients=product['ingredients'],
-            cook_telegram=product.get('cook_telegram', '')
+            ingredients=product['ingredients']
         )
 
         success_message = f"""✅ *Продукт добавлен!*
@@ -452,7 +391,6 @@ def get_product_conversation_handler():
             DESCRIPTION: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_description)],
             PRICE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_price)],
             IMAGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_image)],
-            COOK_TELEGRAM: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_cook_telegram)],
             CATEGORY: [CallbackQueryHandler(product_category, pattern='^cat')],
             INGREDIENTS: [MessageHandler(filters.TEXT & ~filters.COMMAND, product_ingredients)],
             CONFIRM: [

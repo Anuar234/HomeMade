@@ -87,17 +87,14 @@ async def create_order(order: Order):
                 # Конвертируем Row в dict для безопасного доступа
                 row_dict = dict(row)
                 cursor.execute(fix_query('''
-                    INSERT INTO order_items (order_id, product_id, product_name, quantity, price, cook_name, cook_phone, cook_telegram)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO order_items (order_id, product_id, product_name, quantity, price)
+                    VALUES (?, ?, ?, ?, ?)
                 '''), (
                     order_id,
                     item.product_id,
                     row_dict['name'],
                     item.quantity,
-                    row_dict['price'],
-                    row_dict.get('cook_name', ''),
-                    row_dict.get('cook_phone', ''),
-                    row_dict.get('cook_telegram', '')
+                    row_dict['price']
                 ))
 
         conn.commit()
@@ -109,8 +106,7 @@ async def create_order(order: Order):
                 SELECT o.*,
                        STRING_AGG(
                            oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':' ||
-                           COALESCE(oi.cook_telegram, ''), ','
+                           oi.quantity || ':' || oi.price || ':', ','
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -122,8 +118,7 @@ async def create_order(order: Order):
                 SELECT o.*,
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':' ||
-                           COALESCE(oi.cook_telegram, '')
+                           oi.quantity || ':' || oi.price || ':'
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -174,9 +169,7 @@ async def get_orders():
                         'product_id': parts[0],
                         'product_name': parts[1],
                         'quantity': int(parts[2]),
-                        'price': float(parts[3]),
-                        'cook_name': parts[4] if len(parts) > 4 else '',
-                        'cook_phone': parts[5] if len(parts) > 5 else ''
+                        'price': float(parts[3])
                     })
 
             order['items'] = items
@@ -239,8 +232,7 @@ async def update_order_status(order_id: str, status: str):
                 SELECT o.*,
                        STRING_AGG(
                            oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':' ||
-                           COALESCE(oi.cook_telegram, ''), ','
+                           oi.quantity || ':' || oi.price || ':', ','
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
@@ -252,8 +244,7 @@ async def update_order_status(order_id: str, status: str):
                 SELECT o.*,
                        GROUP_CONCAT(
                            oi.product_id || ':' || oi.product_name || ':' ||
-                           oi.quantity || ':' || oi.price || ':' ||
-                           COALESCE(oi.cook_telegram, '')
+                           oi.quantity || ':' || oi.price || ':'
                        ) as items_data
                 FROM orders o
                 LEFT JOIN order_items oi ON o.id = oi.order_id
