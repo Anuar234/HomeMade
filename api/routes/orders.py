@@ -10,10 +10,24 @@ from api.models import Order
 from api.notifications import send_telegram_notifications, send_status_update_notification
 from database import db
 
+try:
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    RealDictCursor = None
+
 router = APIRouter()
 
 # Compatibility wrapper for existing code
 get_db = db.get_connection
+
+
+def get_cursor(conn):
+    """Get cursor with dict support for both SQLite and PostgreSQL"""
+    if db.use_postgres and RealDictCursor:
+        return conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        conn.row_factory = lambda c, r: dict(zip([col[0] for col in c.description], r))
+        return conn.cursor()
 
 
 def fix_query(query: str) -> str:
@@ -32,7 +46,7 @@ async def create_order(order: Order):
     # Вычисляем общую сумму
     total = 0
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
 
         for item in order.items:
             cursor.execute(fix_query('SELECT * FROM products WHERE id = ?'), (item.product_id,))
@@ -125,7 +139,7 @@ async def create_order(order: Order):
 async def get_orders():
     """Получить все заказы из БД"""
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
 
         cursor.execute('''
             SELECT o.*,
@@ -172,7 +186,7 @@ async def get_orders():
 async def get_order(order_id: str):
     """Получить конкретный заказ из БД"""
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
 
         cursor.execute(fix_query('SELECT * FROM orders WHERE id = ?'), (order_id,))
         order_row = cursor.fetchone()
@@ -205,7 +219,7 @@ async def update_order_status(order_id: str, status: str):
         raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {valid_statuses}")
 
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
         cursor.execute(fix_query('UPDATE orders SET status = ? WHERE id = ?'), (status, order_id))
 
         if cursor.rowcount == 0:
@@ -256,7 +270,7 @@ async def update_order_status(order_id: str, status: str):
 async def delete_order(order_id: str):
     """Удалить заказ из БД"""
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
 
         # Удаляем items заказа
         cursor.execute(fix_query('DELETE FROM order_items WHERE order_id = ?'), (order_id,))
