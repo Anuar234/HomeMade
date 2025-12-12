@@ -216,8 +216,8 @@ async def get_app():
                     { name: "soup", label: "Супы", icon: "/static/stickers_animations/cookie.json" },
                     { name: "pelmeni", label: "Пельмени", icon: "/static/stickers_animations/pie.json" },
                     { name: "khachapuri", label: "Хачапури", icon: "/static/stickers_animations/donut.json" },
-                    { name: "dessert", label: "Десерты", icon: "/static/stickers_animations/cupcake.json" },
-                    { name: "salad", label: "Закуски", icon: "/static/stickers_animations/salad.json" },
+                    { name: "dessert", label: "Десерты", icon: "/static/stickers_animations/cake.json" },
+                    { name: "salad", label: "Закуски", icon: "/static/stickers_animations/cookie.json" },
                 ]);
 
                 const goToCategory = (cat) => {
