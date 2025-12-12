@@ -12,10 +12,24 @@ from ..utils import format_order
 # Import from root database module (not bot.database)
 from database import db
 
+try:
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    RealDictCursor = None
+
 
 def get_db():
     """Get database connection (compatibility wrapper)"""
     return db.get_connection()
+
+
+def get_cursor(conn):
+    """Get cursor with dict support for both SQLite and PostgreSQL"""
+    if db.use_postgres and RealDictCursor:
+        return conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        conn.row_factory = lambda c, r: dict(zip([col[0] for col in c.description], r))
+        return conn.cursor()
 
 
 def fix_query(query: str) -> str:
@@ -73,7 +87,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # === LIST PRODUCTS ===
     if data == "list_products":
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute('SELECT COUNT(*) as count FROM products')
             count = cursor.fetchone()['count']
 
@@ -104,7 +118,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # === ALL ORDERS ===
     if data == "orders_all":
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute('''
                 SELECT o.*,
                        GROUP_CONCAT(
@@ -117,7 +131,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ORDER BY o.created_at DESC
                 LIMIT 5
             ''')
-            orders = [dict(row) for row in cursor.fetchall()]
+            orders = cursor.fetchall()
 
         if not orders:
             await query.edit_message_text("📭 Заказов пока нет")
@@ -140,7 +154,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # === PENDING ORDERS ===
     elif data == "orders_pending":
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute('''
                 SELECT o.*,
                        GROUP_CONCAT(
@@ -154,7 +168,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 GROUP BY o.id
                 ORDER BY o.created_at DESC
             ''')
-            orders = [dict(row) for row in cursor.fetchall()]
+            orders = cursor.fetchall()
 
         if not orders:
             await query.edit_message_text("✅ Новых заказов нет")
@@ -181,7 +195,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # === COOKING ORDERS ===
     elif data == "orders_cooking":
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute('''
                 SELECT o.*,
                        GROUP_CONCAT(
@@ -194,7 +208,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 GROUP BY o.id
                 ORDER BY o.created_at DESC
             ''')
-            orders = [dict(row) for row in cursor.fetchall()]
+            orders = cursor.fetchall()
 
         if not orders:
             await query.edit_message_text("📭 Заказов в работе нет")
@@ -219,7 +233,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_id = query.from_user.id
 
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute('''
             SELECT o.*,
                    GROUP_CONCAT(
@@ -233,7 +247,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ORDER BY o.created_at DESC
             LIMIT 5
         ''', (user_id,))
-            orders = [dict(row) for row in cursor.fetchall()]
+            orders = cursor.fetchall()
 
         if not orders:
             await query.edit_message_text("📭 У тебя пока нет заказов.")
@@ -256,7 +270,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # === STATISTICS ===
     elif data == "stats":
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
 
             cursor.execute('SELECT COUNT(*) as count FROM orders')
             total_orders = cursor.fetchone()['count']
@@ -309,7 +323,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         order_id = data.replace("order_detail_", "")
 
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute('''
                 SELECT o.*,
                        GROUP_CONCAT(
@@ -360,7 +374,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         new_status = parts[2]
 
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute(
                 'UPDATE orders SET status = ?, created_at = CURRENT_TIMESTAMP WHERE id = ?',
                 (new_status, order_id)
@@ -395,9 +409,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # === DELETE PRODUCT LIST ===
     elif data == "delete_product_list":
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute('SELECT id, name, category, price FROM products ORDER BY category, name LIMIT 20')
-            products = [dict(row) for row in cursor.fetchall()]
+            products = cursor.fetchall()
 
         if not products:
             await query.edit_message_text("🍽️ Меню пустое, нечего удалять")
@@ -423,7 +437,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         product_id = data.replace("delete_prod_", "")
 
         with get_db() as conn:
-            cursor = conn.cursor()
+            cursor = get_cursor(conn)
             cursor.execute(fix_query('SELECT name FROM products WHERE id = ?'), (product_id,))
             product = cursor.fetchone()
 

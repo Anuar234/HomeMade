@@ -13,10 +13,24 @@ from ..utils import is_admin, format_order
 # Import from root database module
 from database import db, get_all_orders, get_all_products
 
+try:
+    from psycopg2.extras import RealDictCursor
+except ImportError:
+    RealDictCursor = None
+
 
 def get_db():
     """Get database connection (compatibility wrapper)"""
     return db.get_connection()
+
+
+def get_cursor(conn):
+    """Get cursor with dict support for both SQLite and PostgreSQL"""
+    if db.use_postgres and RealDictCursor:
+        return conn.cursor(cursor_factory=RealDictCursor)
+    else:
+        conn.row_factory = lambda c, r: dict(zip([col[0] for col in c.description], r))
+        return conn.cursor()
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -99,7 +113,7 @@ async def orders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
         cursor.execute('''
             SELECT o.*,
                    GROUP_CONCAT(
@@ -113,7 +127,7 @@ async def orders_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             ORDER BY o.created_at DESC
             LIMIT 10
         ''')
-        orders = [dict(row) for row in cursor.fetchall()]
+        orders = cursor.fetchall()
 
     if not orders:
         await update.message.reply_text("📭 Заказов пока нет")
@@ -146,7 +160,7 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
         cursor.execute('''
             SELECT o.*,
                    GROUP_CONCAT(
@@ -159,7 +173,7 @@ async def pending_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
             GROUP BY o.id
             ORDER BY o.created_at DESC
         ''')
-        orders = [dict(row) for row in cursor.fetchall()]
+        orders = cursor.fetchall()
 
     if not orders:
         await update.message.reply_text("✅ Новых заказов нет")
@@ -196,7 +210,7 @@ async def stats_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
 
         cursor.execute('SELECT COUNT(*) as count FROM orders')
         total_orders = cursor.fetchone()['count']
@@ -258,9 +272,9 @@ async def products_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     with get_db() as conn:
-        cursor = conn.cursor()
+        cursor = get_cursor(conn)
         cursor.execute('SELECT * FROM products ORDER BY category, name')
-        products = [dict(row) for row in cursor.fetchall()]
+        products = cursor.fetchall()
 
     if not products:
         await update.message.reply_text("🍽️ Меню пока пустое. Используйте /addproduct для добавления блюд.")
