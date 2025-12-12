@@ -36,8 +36,9 @@ async def lifespan(app):
     
     try:
         import bot
-        print(f"Database: {'PostgreSQL' if bot.db.use_postgres else 'SQLite'}")
-        
+        from database import db
+        print(f"Database: {'PostgreSQL' if db.use_postgres else 'SQLite'}")
+
         # Создаем приложение
         application = bot.create_application()
         
