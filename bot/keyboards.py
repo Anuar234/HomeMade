@@ -30,6 +30,7 @@ def get_product_management_keyboard():
     """Get product management keyboard"""
     keyboard = [
         [InlineKeyboardButton("➕ Добавить продукт", callback_data="add_product")],
+        [InlineKeyboardButton("✏️ Редактировать продукт", callback_data="edit_product")],
         [InlineKeyboardButton("📋 Список продуктов", callback_data="list_products")],
         [InlineKeyboardButton("🗑️ Удалить продукт", callback_data="delete_product")],
         [InlineKeyboardButton("◀️ Назад", callback_data="back_to_main")],

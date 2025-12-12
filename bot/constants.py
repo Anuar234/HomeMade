@@ -6,6 +6,9 @@ Conversation states, emojis, categories, and other static values
 # Conversation States for adding products
 NAME, DESCRIPTION, PRICE, IMAGE, CATEGORY, INGREDIENTS, CONFIRM = range(7)
 
+# Conversation States for editing products
+EDIT_SELECT_PRODUCT, EDIT_SELECT_FIELD, EDIT_NEW_VALUE, EDIT_CONFIRM = range(7, 11)
+
 # Order status emojis
 STATUS_EMOJI = {
     'pending': '🕐',

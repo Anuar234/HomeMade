@@ -13,6 +13,7 @@ from bot.handlers import (
     stats_command,
     products_command,
     get_product_conversation_handler,
+    get_edit_product_conversation_handler,
     button_callback
 )
 
@@ -48,6 +49,10 @@ def create_application():
     # Add conversation handler for product management
     print("📝 Registering product conversation handler...")
     application.add_handler(get_product_conversation_handler())
+
+    # Add conversation handler for product editing
+    print("📝 Registering edit product conversation handler...")
+    application.add_handler(get_edit_product_conversation_handler())
 
     # Add callback query handler
     print("📝 Registering callback handler...")

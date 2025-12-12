@@ -16,9 +16,10 @@ from telegram.ext import (
 
 from ..config import ADMIN_IDS
 from ..constants import NAME, DESCRIPTION, PRICE, IMAGE, CATEGORY, INGREDIENTS, CONFIRM
+from ..constants import EDIT_SELECT_PRODUCT, EDIT_SELECT_FIELD, EDIT_NEW_VALUE, EDIT_CONFIRM
 
 # Import from root database module
-from database import add_product
+from database import add_product, get_all_products, edit_product
 
 
 async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -402,5 +403,291 @@ def get_product_conversation_handler():
         fallbacks=[
             CommandHandler('cancel', cancel_product),
             CallbackQueryHandler(cancel_product, pattern='cancelproduct')
+        ]
+    )
+
+
+# ============================================================================
+# EDIT PRODUCT HANDLERS
+# ============================================================================
+
+async def edit_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Start editing a product - show list of all products"""
+    query = update.callback_query if update.callback_query else None
+
+    if query:
+        await query.answer()
+        if query.from_user.id not in ADMIN_IDS:
+            await query.edit_message_text("❌ Только для администраторов")
+            return ConversationHandler.END
+        message = query.message
+    else:
+        if update.effective_user.id not in ADMIN_IDS:
+            await update.message.reply_text("❌ Только для администраторов")
+            return ConversationHandler.END
+        message = update.message
+
+    # Get all products
+    products = get_all_products()
+
+    if not products:
+        text = "❌ Нет продуктов для редактирования"
+        if query:
+            await query.edit_message_text(text)
+        else:
+            await message.reply_text(text)
+        return ConversationHandler.END
+
+    # Create buttons for each product (max 3 per row)
+    keyboard = []
+    for i in range(0, len(products), 3):
+        row = []
+        for product in products[i:i+3]:
+            product_id = product[0]
+            product_name = product[1]
+            # Truncate long names
+            display_name = product_name[:20] + '...' if len(product_name) > 20 else product_name
+            row.append(InlineKeyboardButton(display_name, callback_data=f"editprod_{product_id}"))
+        keyboard.append(row)
+
+    keyboard.append([InlineKeyboardButton("❌ Отменить", callback_data="cancel_edit")])
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    text = "📝 <b>Редактирование продукта</b>\n\nВыберите продукт для редактирования:"
+
+    if query:
+        await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
+    else:
+        await message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
+
+    return EDIT_SELECT_PRODUCT
+
+
+async def edit_select_field(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User selected a product, now select which field to edit"""
+    query = update.callback_query
+    await query.answer()
+
+    product_id = query.data.replace('editprod_', '')
+    context.user_data['edit_product_id'] = product_id
+
+    # Get product details
+    products = get_all_products()
+    product = next((p for p in products if p[0] == product_id), None)
+
+    if not product:
+        await query.edit_message_text("❌ Продукт не найден")
+        return ConversationHandler.END
+
+    # Store product info
+    context.user_data['edit_product_info'] = {
+        'id': product[0],
+        'name': product[1],
+        'description': product[2],
+        'price': product[3],
+        'image': product[4]
+    }
+
+    keyboard = [
+        [InlineKeyboardButton("📝 Название", callback_data="editfield_name")],
+        [InlineKeyboardButton("📄 Описание", callback_data="editfield_description")],
+        [InlineKeyboardButton("💰 Цена", callback_data="editfield_price")],
+        [InlineKeyboardButton("🖼️ Изображение", callback_data="editfield_image")],
+        [InlineKeyboardButton("❌ Отменить", callback_data="cancel_edit")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    text = f"""📦 <b>Продукт:</b> {product[1]}
+
+<b>Текущие данные:</b>
+📝 Название: {product[1]}
+📄 Описание: {product[2][:100]}{'...' if len(product[2]) > 100 else ''}
+💰 Цена: {product[3]} AED
+🖼️ Изображение: {product[4][:50]}...
+
+Что вы хотите изменить?"""
+
+    await query.edit_message_text(text, reply_markup=reply_markup, parse_mode='HTML')
+    return EDIT_SELECT_FIELD
+
+
+async def edit_input_new_value(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User selected field to edit, ask for new value"""
+    query = update.callback_query
+    await query.answer()
+
+    field = query.data.replace('editfield_', '')
+    context.user_data['edit_field'] = field
+
+    product_info = context.user_data.get('edit_product_info', {})
+
+    field_names = {
+        'name': 'название',
+        'description': 'описание',
+        'price': 'цену',
+        'image': 'URL изображения'
+    }
+
+    field_examples = {
+        'name': 'Например: Пельмени домашние',
+        'description': 'Например: Вкусные домашние пельмени с мясом',
+        'price': 'Например: 85.50',
+        'image': 'Например: https://images.unsplash.com/photo-...'
+    }
+
+    text = f"""✏️ <b>Редактирование: {field_names[field]}</b>
+
+<b>Текущее значение:</b>
+{product_info.get(field, 'Не указано')}
+
+Введите новое значение:
+{field_examples[field]}"""
+
+    await query.edit_message_text(text, parse_mode='HTML')
+    return EDIT_NEW_VALUE
+
+
+async def edit_confirm_change(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """User entered new value, show confirmation"""
+    new_value = update.message.text.strip()
+    field = context.user_data.get('edit_field')
+    product_info = context.user_data.get('edit_product_info', {})
+
+    # Validate input
+    if field == 'price':
+        try:
+            new_value = float(new_value)
+            if new_value <= 0:
+                await update.message.reply_text("❌ Цена должна быть больше 0. Попробуйте снова:")
+                return EDIT_NEW_VALUE
+        except ValueError:
+            await update.message.reply_text("❌ Неверный формат цены. Введите число (например: 25 или 25.50):")
+            return EDIT_NEW_VALUE
+    elif field == 'name' and len(new_value) < 3:
+        await update.message.reply_text("❌ Название слишком короткое. Минимум 3 символа:")
+        return EDIT_NEW_VALUE
+    elif field == 'description' and len(new_value) < 10:
+        await update.message.reply_text("❌ Описание слишком короткое. Минимум 10 символов:")
+        return EDIT_NEW_VALUE
+    elif field == 'image' and not new_value.startswith(('http://', 'https://')):
+        await update.message.reply_text("❌ URL изображения должен начинаться с http:// или https://:")
+        return EDIT_NEW_VALUE
+
+    context.user_data['edit_new_value'] = new_value
+
+    field_names = {
+        'name': 'Название',
+        'description': 'Описание',
+        'price': 'Цена',
+        'image': 'Изображение'
+    }
+
+    old_value = product_info.get(field, 'Не указано')
+    display_new = new_value if field != 'image' else f"{str(new_value)[:50]}..."
+    display_old = old_value if field != 'image' else f"{str(old_value)[:50]}..."
+
+    keyboard = [
+        [InlineKeyboardButton("✅ Подтвердить", callback_data="confirm_edit")],
+        [InlineKeyboardButton("❌ Отменить", callback_data="cancel_edit")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    text = f"""📋 <b>Подтверждение изменений</b>
+
+<b>Продукт:</b> {product_info.get('name')}
+<b>Поле:</b> {field_names[field]}
+
+<b>Было:</b>
+{display_old}
+
+<b>Станет:</b>
+{display_new}
+
+Подтвердить изменение?"""
+
+    await update.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
+    return EDIT_CONFIRM
+
+
+async def edit_save_changes(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Save changes to database"""
+    query = update.callback_query
+    await query.answer()
+
+    product_id = context.user_data.get('edit_product_id')
+    field = context.user_data.get('edit_field')
+    new_value = context.user_data.get('edit_new_value')
+    product_info = context.user_data.get('edit_product_info', {})
+
+    try:
+        edit_product(product_id, field, new_value)
+
+        field_names = {
+            'name': 'название',
+            'description': 'описание',
+            'price': 'цена',
+            'image': 'изображение'
+        }
+
+        success_text = f"""✅ <b>Изменения сохранены!</b>
+
+📦 Продукт: {product_info.get('name')}
+✏️ Обновлено: {field_names[field]}
+
+⚡ Изменения вступили в силу!
+➡️ Проверьте мини-приложение."""
+
+        await query.edit_message_text(success_text, parse_mode='HTML')
+
+    except Exception as e:
+        await query.edit_message_text(f"❌ Ошибка при сохранении: {str(e)}")
+
+    finally:
+        context.user_data.clear()
+
+    return ConversationHandler.END
+
+
+async def cancel_edit(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Cancel edit operation"""
+    query = update.callback_query if update.callback_query else None
+
+    if query:
+        await query.answer()
+        await query.edit_message_text("❌ Редактирование отменено")
+    else:
+        await update.message.reply_text("❌ Редактирование отменено")
+
+    context.user_data.clear()
+    return ConversationHandler.END
+
+
+def get_edit_product_conversation_handler():
+    """Create and return the ConversationHandler for product editing"""
+    return ConversationHandler(
+        entry_points=[
+            CallbackQueryHandler(edit_product_start, pattern='^edit_product$'),
+            CommandHandler('edit', edit_product_start)
+        ],
+        states={
+            EDIT_SELECT_PRODUCT: [
+                CallbackQueryHandler(edit_select_field, pattern='^editprod_'),
+                CallbackQueryHandler(cancel_edit, pattern='^cancel_edit$')
+            ],
+            EDIT_SELECT_FIELD: [
+                CallbackQueryHandler(edit_input_new_value, pattern='^editfield_'),
+                CallbackQueryHandler(cancel_edit, pattern='^cancel_edit$')
+            ],
+            EDIT_NEW_VALUE: [
+                MessageHandler(filters.TEXT & ~filters.COMMAND, edit_confirm_change)
+            ],
+            EDIT_CONFIRM: [
+                CallbackQueryHandler(edit_save_changes, pattern='^confirm_edit$'),
+                CallbackQueryHandler(cancel_edit, pattern='^cancel_edit$')
+            ]
+        },
+        fallbacks=[
+            CommandHandler('cancel', cancel_edit),
+            CallbackQueryHandler(cancel_edit, pattern='^cancel_edit$')
         ]
     )

@@ -345,6 +345,26 @@ def add_product(name: str, description: str, price: float, image: str,
     return product_id
 
 
+def edit_product(product_id: str, field: str, value):
+    """Обновить поле продукта"""
+    placeholder = db.get_placeholder()
+
+    # Whitelist допустимых полей для безопасности
+    allowed_fields = ['name', 'description', 'price', 'image']
+    if field not in allowed_fields:
+        raise ValueError(f"Field {field} is not allowed for editing")
+
+    query = f"UPDATE products SET {field} = {placeholder} WHERE id = {placeholder}"
+    db.execute_query(query, (value, product_id))
+
+    try:
+        print(f"Product {product_id} updated: {field} = {value}")
+    except UnicodeEncodeError:
+        print(f"Product {product_id} updated: {field}")
+
+    return True
+
+
 def delete_product(product_id: int):
     """Удалить продукт"""
     placeholder = db.get_placeholder()
