@@ -8,7 +8,9 @@ from telegram.ext import ContextTypes
 
 from ..config import ADMIN_IDS
 from ..utils import format_order
-from ..database import db
+
+# Import from root database module (not bot.database)
+from database import db
 
 
 def get_db():

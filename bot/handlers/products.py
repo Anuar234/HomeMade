@@ -16,7 +16,9 @@ from telegram.ext import (
 
 from ..config import ADMIN_IDS
 from ..constants import NAME, DESCRIPTION, PRICE, IMAGE, COOK_TELEGRAM, CATEGORY, INGREDIENTS, CONFIRM
-from ..database import add_product
+
+# Import from root database module
+from database import add_product
 
 
 async def add_product_start(update: Update, context: ContextTypes.DEFAULT_TYPE):

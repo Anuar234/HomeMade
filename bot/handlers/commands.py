@@ -9,7 +9,9 @@ from datetime import datetime
 
 from ..config import ADMIN_IDS
 from ..utils import is_admin, format_order
-from ..database import db, get_all_orders, get_all_products
+
+# Import from root database module
+from database import db, get_all_orders, get_all_products
 
 
 def get_db():
