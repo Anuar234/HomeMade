@@ -105,6 +105,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "menu_manage":
         keyboard = [
             [InlineKeyboardButton("➕ Добавить блюдо", callback_data="add_product")],
+            [InlineKeyboardButton("✏️ Редактировать блюдо", callback_data="edit_product")],
             [InlineKeyboardButton("📋 Список блюд", callback_data="list_products")],
             [InlineKeyboardButton("🗑️ Удалить блюдо", callback_data="delete_product_list")],
             [InlineKeyboardButton("🔙 Назад", callback_data="back_to_main")]
